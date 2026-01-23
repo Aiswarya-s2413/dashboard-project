@@ -29,7 +29,7 @@ const StaggeredChart = () => {
 
   useEffect(() => {
     // 1. Fetch data from the Django API
-    axios.get('http://127.0.0.1:8000/api/chart-data/')
+    axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/')
       .then(response => {
         setData(response.data);
         setLoading(false);
