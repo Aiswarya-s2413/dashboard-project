@@ -58,9 +58,8 @@ const StaggeredChart = () => {
   }
 
   return (
-    <>
-      <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}>
-        <ResponsiveContainer width="100%" height="100%">
+    <div style={{ width: '100%', height: 'calc(100vh - 80px)', minHeight: 0 }}>
+      <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
             margin={{
@@ -133,9 +132,8 @@ const StaggeredChart = () => {
             <Bar dataKey="80-100%" stackId="a" fill={categoryColors['80-100%']} name="80–100% growth" />
             <Bar dataKey=">100%" stackId="a" fill={categoryColors['>100%']} name=">100% growth" />
           </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
