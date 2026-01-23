@@ -203,3 +203,25 @@
   color: var(--text-secondary);
   font-size: 14px;
 }
+
+/* Dark theme input styling */
+input[type="date"],
+select {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-inner-spin-button {
+  filter: invert(1);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+select option {
+  background-color: #020617;
+  color: #e5e7eb;
+}
