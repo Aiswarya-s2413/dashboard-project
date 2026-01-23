@@ -59,8 +59,8 @@ const StaggeredChart = () => {
 
   return (
     <>
-      <div style={{ width: '100%', height: 420 }}>
-        <ResponsiveContainer>
+      <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
             margin={{
@@ -134,11 +134,6 @@ const StaggeredChart = () => {
             <Bar dataKey=">100%" stackId="a" fill={categoryColors['>100%']} name=">100% growth" />
           </BarChart>
         </ResponsiveContainer>
-      </div>
-
-      <div className="chart-footnote">
-        X‑axis: rounded holding duration in weeks. Y‑axis: count of companies with
-        12‑month performance &ge; 20%, broken out by return band.
       </div>
     </>
   );
