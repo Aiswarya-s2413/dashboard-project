@@ -44,7 +44,7 @@ const StaggeredChart = () => {
   // 1. Fetch Sector List (Run once on mount)
   useEffect(() => {
     // Assuming the sector endpoint is relative to your base URL
-    axios.get('http://127.0.0.1:8000/api/sectors/')
+    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
@@ -63,7 +63,7 @@ const StaggeredChart = () => {
       mcap: filters.mcap
     };
 
-    axios.get('http://127.0.0.1:8000/api/chart-data/', { params })
+    axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params })
       .then(response => {
         setData(response.data);
         setLoading(false);
