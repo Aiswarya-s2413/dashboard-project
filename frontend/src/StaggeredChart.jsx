@@ -41,53 +41,106 @@ const StaggeredChart = () => {
       });
   }, []);
 
-  if (loading) return <div style={{textAlign: 'center', marginTop: '50px'}}>Loading Chart...</div>;
-  if (error) return <div style={{textAlign: 'center', marginTop: '50px', color: 'red'}}>{error}</div>;
+  if (loading) {
+    return (
+      <div className="status-message">
+        Loading chart data…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="status-message">
+        {error}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h2 style={{ textAlign: 'center' }}>Success Duration Analysis</h2>
-      <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }}>
-        X-Axis: Duration (Weeks) | Y-Axis: Number of Successful Companies (&gt;=20% growth)
-      </p>
-      
-      <div style={{ width: '100%', height: 600 }}>
+    <>
+      <div style={{ width: '100%', height: 420 }}>
         <ResponsiveContainer>
           <BarChart
             data={data}
             margin={{
-              top: 20,
-              right: 30,
-              left: 20,
-              bottom: 40,
+              top: 10,
+              right: 24,
+              left: 4,
+              bottom: 32,
             }}
           >
-            <CartesianGrid strokeDasharray="3 3" />
-            
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="rgba(148, 163, 184, 0.25)"
+              vertical={false}
+            />
+
             {/* X-Axis: Duration */}
-            <XAxis dataKey="duration">
-                <Label value="Duration" offset={-10} position="insideBottom" />
+            <XAxis
+              dataKey="duration"
+              tick={{ fill: '#9ca3af', fontSize: 11 }}
+              tickLine={false}
+              axisLine={{ stroke: 'rgba(148, 163, 184, 0.35)' }}
+            >
+              <Label
+                value="Holding duration (weeks)"
+                offset={-20}
+                position="insideBottom"
+                style={{ fill: '#6b7280', fontSize: 11 }}
+              />
             </XAxis>
-            
+
             {/* Y-Axis: Count of companies */}
-            <YAxis label={{ value: 'No. of Successes', angle: -90, position: 'insideLeft' }}/>
-            
-            <Tooltip cursor={{fill: 'transparent'}} />
-            <Legend verticalAlign="top" height={36}/>
-            
-            {/* STACKED BARS: 
-               stackId="a" ensures they stack on top of each other.
-               We map through our known categories to create the bars.
-            */}
-            <Bar dataKey="20-40%" stackId="a" fill={categoryColors['20-40%']} name="20-40% Growth" />
-            <Bar dataKey="40-60%" stackId="a" fill={categoryColors['40-60%']} name="40-60% Growth" />
-            <Bar dataKey="60-80%" stackId="a" fill={categoryColors['60-80%']} name="60-80% Growth" />
-            <Bar dataKey="80-100%" stackId="a" fill={categoryColors['80-100%']} name="80-100% Growth" />
-            <Bar dataKey=">100%" stackId="a" fill={categoryColors['>100%']} name=">100% Growth" />
+            <YAxis
+              tick={{ fill: '#9ca3af', fontSize: 11 }}
+              tickLine={false}
+              axisLine={{ stroke: 'rgba(148, 163, 184, 0.35)' }}
+              label={{
+                value: 'Number of successful companies',
+                angle: -90,
+                position: 'insideLeft',
+                style: { fill: '#6b7280', fontSize: 11 },
+              }}
+            />
+
+            <Tooltip
+              cursor={{ fill: 'rgba(15, 23, 42, 0.8)' }}
+              contentStyle={{
+                backgroundColor: '#020617',
+                border: '1px solid rgba(148, 163, 184, 0.5)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                boxShadow: '0 18px 45px rgba(15, 23, 42, 0.9)',
+                fontSize: 11,
+              }}
+              labelStyle={{ color: '#e5e7eb', marginBottom: 4 }}
+              itemStyle={{ color: '#e5e7eb' }}
+            />
+
+            <Legend
+              verticalAlign="top"
+              height={30}
+              wrapperStyle={{
+                paddingBottom: 4,
+              }}
+            />
+
+            {/* STACKED BARS */}
+            <Bar dataKey="20-40%" stackId="a" fill={categoryColors['20-40%']} name="20–40% growth" />
+            <Bar dataKey="40-60%" stackId="a" fill={categoryColors['40-60%']} name="40–60% growth" />
+            <Bar dataKey="60-80%" stackId="a" fill={categoryColors['60-80%']} name="60–80% growth" />
+            <Bar dataKey="80-100%" stackId="a" fill={categoryColors['80-100%']} name="80–100% growth" />
+            <Bar dataKey=">100%" stackId="a" fill={categoryColors['>100%']} name=">100% growth" />
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </div>
+
+      <div className="chart-footnote">
+        X‑axis: rounded holding duration in weeks. Y‑axis: count of companies with
+        12‑month performance &ge; 20%, broken out by return band.
+      </div>
+    </>
   );
 };
 
