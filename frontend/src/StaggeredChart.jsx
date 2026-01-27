@@ -50,7 +50,7 @@ const StaggeredChart = () => {
   // 1. Fetch Sector List (Run once on mount)
   useEffect(() => {
     // Assuming the sector endpoint is relative to your base URL
-    axios.get('http://dashboard.aiswaryasathyan.space/api/sectors/')
+    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
@@ -65,7 +65,7 @@ const StaggeredChart = () => {
     const params = {
       start_date: filters.startDate,
       end_date: filters.endDate,
-      sector: filters.sector,
+      sector: filters.sector,             // Sector filter
       mcap: filters.mcap
     };
 
