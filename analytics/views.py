@@ -150,3 +150,60 @@ class DashboardDataView(APIView):
         except Exception as e:
             print(f"Error: {e}")
             return Response({"error": str(e)}, status=500)
+
+
+class KPIDataView(APIView):
+    """Returns KPI metrics based on filtered data"""
+
+    def get(self, request):
+        try:
+            df = get_merged_data()
+
+            # --- APPLY FILTERS (same as DashboardDataView) ---
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+
+            if start_date:
+                df = df[df["breakout date"] >= pd.to_datetime(start_date)]
+            if end_date:
+                df = df[df["breakout date"] <= pd.to_datetime(end_date)]
+
+            sector = request.query_params.get("sector")
+            if sector and sector != "All":
+                df = df[df["sector"] == sector]
+
+            mcap_cat = request.query_params.get("mcap")
+            if mcap_cat and mcap_cat != "All":
+                df = df[df["mcap_category"] == mcap_cat]
+
+            # --- CALCULATE KPIs ---
+            total_samples = len(df)
+            
+            # Most profitable stock
+            if total_samples > 0:
+                most_profitable = df.loc[df["12-month %"].idxmax()]
+                most_profitable_name = most_profitable.get("symbol", "N/A")
+                most_profitable_return = round(most_profitable["12-month %"], 2)
+            else:
+                most_profitable_name = "N/A"
+                most_profitable_return = 0
+
+            # Average duration
+            avg_duration = round(df["duration"].mean(), 1) if total_samples > 0 else 0
+
+            # Average success rate (average return percentage of all companies)
+            success_rate = round(df["12-month %"].mean(), 1) if total_samples > 0 else 0
+
+            return Response({
+                "total_samples": total_samples,
+                "most_profitable": {
+                    "name": most_profitable_name,
+                    "return": most_profitable_return
+                },
+                "average_duration": avg_duration,
+                "success_rate": success_rate
+            })
+
+        except Exception as e:
+            print(f"Error calculating KPIs: {e}")
+            return Response({"error": str(e)}, status=500)

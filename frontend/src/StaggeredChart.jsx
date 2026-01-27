@@ -21,6 +21,12 @@ const StaggeredChart = () => {
   const [error, setError] = useState(null);
   const [chartHeight, setChartHeight] = useState(600); // Default height
   const chartContainerRef = useRef(null);
+  const [kpiData, setKpiData] = useState({
+    total_samples: 0,
+    most_profitable: { name: 'N/A', return: 0 },
+    average_duration: 0,
+    success_rate: 0
+  });
 
   // Filter State
   const [filters, setFilters] = useState({
@@ -44,14 +50,14 @@ const StaggeredChart = () => {
   // 1. Fetch Sector List (Run once on mount)
   useEffect(() => {
     // Assuming the sector endpoint is relative to your base URL
-    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
+    axios.get('http://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
       .catch(err => console.error("Error fetching sectors:", err));
   }, []);
 
-  // 2. Fetch Chart Data (Run whenever filters change)
+  // 2. Fetch Chart Data and KPI Data (Run whenever filters change)
   useEffect(() => {
     setLoading(true);
     
@@ -63,9 +69,45 @@ const StaggeredChart = () => {
       mcap: filters.mcap
     };
 
-    axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params })
-      .then(response => {
-        setData(response.data);
+    // Fetch chart data and KPI data in parallel
+    Promise.allSettled([
+      axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params }),
+      axios.get('https://dashboard.aiswaryasathyan.space/api/kpi-data/', { params })
+    ])
+      .then(([chartResult, kpiResult]) => {
+        // Handle chart data
+        let chartData = [];
+        if (chartResult.status === 'fulfilled') {
+          chartData = chartResult.value.data;
+          setData(chartData);
+        } else {
+          console.error("Error fetching chart data:", chartResult.reason);
+          setError("Could not load chart data. Ensure Backend is running.");
+        }
+
+        // Handle KPI data (optional - don't break if it fails)
+        if (kpiResult.status === 'fulfilled') {
+          const kpiResponse = kpiResult.value.data;
+          console.log("KPI data received:", kpiResponse);
+          // Verify the data structure
+          if (kpiResponse && typeof kpiResponse === 'object') {
+            setKpiData({
+              total_samples: kpiResponse.total_samples || 0,
+              most_profitable: kpiResponse.most_profitable || { name: 'N/A', return: 0 },
+              average_duration: kpiResponse.average_duration || 0,
+              success_rate: kpiResponse.success_rate || 0
+            });
+          } else {
+            console.warn("Invalid KPI data structure, using fallback");
+            calculateKPIsFromChartData(chartData);
+          }
+        } else {
+          console.warn("KPI endpoint not available:", kpiResult.reason?.response?.status);
+          console.warn("KPI error details:", kpiResult.reason);
+          // Calculate KPIs from chart data as fallback
+          calculateKPIsFromChartData(chartData);
+        }
+
         setLoading(false);
       })
       .catch(err => {
@@ -100,6 +142,46 @@ const StaggeredChart = () => {
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Calculate KPIs from chart data as fallback
+  const calculateKPIsFromChartData = (chartData) => {
+    if (!chartData || chartData.length === 0) {
+      setKpiData({
+        total_samples: 0,
+        most_profitable: { name: 'N/A', return: 0 },
+        average_duration: 0,
+        success_rate: 0
+      });
+      return;
+    }
+
+    // Calculate total samples (sum of all bars)
+    const totalSamples = chartData.reduce((sum, item) => {
+      return sum + (item['20-40%'] || 0) + (item['40-60%'] || 0) + 
+             (item['60-80%'] || 0) + (item['80-100%'] || 0) + (item['>100%'] || 0);
+    }, 0);
+
+    // Calculate average duration (weighted by count)
+    let totalWeightedDuration = 0;
+    chartData.forEach(item => {
+      const count = (item['20-40%'] || 0) + (item['40-60%'] || 0) + 
+                    (item['60-80%'] || 0) + (item['80-100%'] || 0) + (item['>100%'] || 0);
+      totalWeightedDuration += item.duration * count;
+    });
+    const avgDuration = totalSamples > 0 ? (totalWeightedDuration / totalSamples).toFixed(1) : 0;
+
+    // Average return - we can't calculate this accurately from chart data alone
+    // since chart only shows successful companies, so we'll estimate or show 0
+    const avgReturn = 0; // Can't calculate from grouped chart data
+
+    // We can't determine most profitable from chart data alone, so keep default
+    setKpiData({
+      total_samples: totalSamples,
+      most_profitable: { name: 'N/A', return: 0 },
+      average_duration: parseFloat(avgDuration),
+      success_rate: avgReturn // Average return percentage
+    });
   };
 
   // --- STYLES ---
@@ -254,7 +336,90 @@ const StaggeredChart = () => {
         </div>
       </div>
 
-      {/* 2. CHART SECTION */}
+      {/* 2. KPI BOXES SECTION */}
+      <div style={{
+        padding: '20px 24px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '16px',
+        backgroundColor: 'rgba(15, 23, 42, 0.3)',
+        borderBottom: '1px solid rgba(148, 163, 184, 0.2)'
+      }}>
+        {/* Total Samples */}
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Total Samples
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: '600', color: '#e5e7eb' }}>
+            {kpiData.total_samples.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Most Profitable */}
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Most Profitable
+          </div>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: '#e5e7eb', marginBottom: '4px' }}>
+            {kpiData.most_profitable.name}
+          </div>
+          <div style={{ fontSize: '14px', color: '#82ca9d' }}>
+            {kpiData.most_profitable.return}%
+          </div>
+        </div>
+
+        {/* Average Duration */}
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Average Duration
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: '600', color: '#e5e7eb' }}>
+            {kpiData.average_duration}
+          </div>
+          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+            weeks
+          </div>
+        </div>
+
+        {/* Average Return Rate */}
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            Average Return
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: '600', color: '#82ca9d' }}>
+            {kpiData.success_rate}%
+          </div>
+          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+            12-month average
+          </div>
+        </div>
+      </div>
+
+      {/* 3. CHART SECTION */}
       <div style={{ flex: 1, minHeight: 0, padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         
         {loading && (
