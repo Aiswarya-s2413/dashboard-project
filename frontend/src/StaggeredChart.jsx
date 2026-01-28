@@ -28,15 +28,22 @@ const StaggeredChart = () => {
     success_rate: 0
   });
 
+  // Date range from backend
+  const [dateRange, setDateRange] = useState({
+    min_date: '',
+    max_date: ''
+  });
+
   // Filter State
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
     sector: 'All',
-    mcap: 'All'
+    mcap: 'All',
+    cooldownWeeks: 52  // Default cooldown weeks
   });
 
-  // Define colors for your success categories (Your original colors)
+  // Define colors for your success categories
   const categoryColors = {
     '20-40%': '#8884d8',  // Purple
     '40-60%': '#82ca9d',  // Green
@@ -49,7 +56,6 @@ const StaggeredChart = () => {
 
   // 1. Fetch Sector List (Run once on mount)
   useEffect(() => {
-    // Assuming the sector endpoint is relative to your base URL
     axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
@@ -57,16 +63,45 @@ const StaggeredChart = () => {
       .catch(err => console.error("Error fetching sectors:", err));
   }, []);
 
-  // 2. Fetch Chart Data and KPI Data (Run whenever filters change)
+  // 2. Fetch Date Range when cooldown changes
+  useEffect(() => {
+    console.log('Fetching date range for cooldown:', filters.cooldownWeeks);
+    
+    axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
+      params: { cooldown_weeks: filters.cooldownWeeks }
+    })
+      .then(response => {
+        console.log('Date range received:', response.data);
+        setDateRange({
+          min_date: response.data.min_date || '',
+          max_date: response.data.max_date || ''
+        });
+        
+        // Update filters with the new date range if not already set by user
+        setFilters(prev => ({
+          ...prev,
+          startDate: prev.startDate || response.data.min_date || '',
+          endDate: prev.endDate || response.data.max_date || ''
+        }));
+      })
+      .catch(err => {
+        console.error("Error fetching date range:", err);
+      });
+  }, [filters.cooldownWeeks]); // Only re-run when cooldown changes
+
+  // 3. Fetch Chart Data and KPI Data (Run whenever filters change)
   useEffect(() => {
     setLoading(true);
+    
+    console.log('Fetching data with filters:', filters);
     
     // map state to backend query params
     const params = {
       start_date: filters.startDate,
       end_date: filters.endDate,
-      sector: filters.sector,             // Sector filter
-      mcap: filters.mcap
+      sector: filters.sector,
+      mcap: filters.mcap,
+      cooldown_weeks: filters.cooldownWeeks
     };
 
     // Fetch chart data and KPI data in parallel
@@ -79,17 +114,18 @@ const StaggeredChart = () => {
         let chartData = [];
         if (chartResult.status === 'fulfilled') {
           chartData = chartResult.value.data;
+          console.log('Chart data received:', chartData.length, 'duration groups');
           setData(chartData);
+          setError(null);
         } else {
           console.error("Error fetching chart data:", chartResult.reason);
           setError("Could not load chart data. Ensure Backend is running.");
         }
 
-        // Handle KPI data (optional - don't break if it fails)
+        // Handle KPI data
         if (kpiResult.status === 'fulfilled') {
           const kpiResponse = kpiResult.value.data;
           console.log("KPI data received:", kpiResponse);
-          // Verify the data structure
           if (kpiResponse && typeof kpiResponse === 'object') {
             setKpiData({
               total_samples: kpiResponse.total_samples || 0,
@@ -103,8 +139,6 @@ const StaggeredChart = () => {
           }
         } else {
           console.warn("KPI endpoint not available:", kpiResult.reason?.response?.status);
-          console.warn("KPI error details:", kpiResult.reason);
-          // Calculate KPIs from chart data as fallback
           calculateKPIsFromChartData(chartData);
         }
 
@@ -117,7 +151,7 @@ const StaggeredChart = () => {
       });
   }, [filters]); // Re-run when 'filters' state changes
 
-  // 3. Calculate chart container height
+  // 4. Calculate chart container height
   useEffect(() => {
     const updateHeight = () => {
       if (chartContainerRef.current) {
@@ -128,7 +162,6 @@ const StaggeredChart = () => {
       }
     };
 
-    // Use setTimeout to ensure DOM is fully rendered
     const timeoutId = setTimeout(updateHeight, 100);
     window.addEventListener('resize', updateHeight);
     
@@ -136,12 +169,24 @@ const StaggeredChart = () => {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', updateHeight);
     };
-  }, [loading, error, data]); // Recalculate when loading/error/data changes
+  }, [loading, error, data]);
 
   // --- HANDLERS ---
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
+    console.log(`Filter changed: ${name} = ${value}`);
     setFilters(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Reset filters including dates
+  const handleReset = () => {
+    setFilters({ 
+      startDate: dateRange.min_date || '', 
+      endDate: dateRange.max_date || '', 
+      sector: 'All', 
+      mcap: 'All', 
+      cooldownWeeks: 52 
+    });
   };
 
   // Calculate KPIs from chart data as fallback
@@ -156,13 +201,11 @@ const StaggeredChart = () => {
       return;
     }
 
-    // Calculate total samples (sum of all bars)
     const totalSamples = chartData.reduce((sum, item) => {
       return sum + (item['20-40%'] || 0) + (item['40-60%'] || 0) + 
              (item['60-80%'] || 0) + (item['80-100%'] || 0) + (item['>100%'] || 0);
     }, 0);
 
-    // Calculate average duration (weighted by count)
     let totalWeightedDuration = 0;
     chartData.forEach(item => {
       const count = (item['20-40%'] || 0) + (item['40-60%'] || 0) + 
@@ -171,21 +214,15 @@ const StaggeredChart = () => {
     });
     const avgDuration = totalSamples > 0 ? (totalWeightedDuration / totalSamples).toFixed(1) : 0;
 
-    // Average return - we can't calculate this accurately from chart data alone
-    // since chart only shows successful companies, so we'll estimate or show 0
-    const avgReturn = 0; // Can't calculate from grouped chart data
-
-    // We can't determine most profitable from chart data alone, so keep default
     setKpiData({
       total_samples: totalSamples,
       most_profitable: { name: 'N/A', return: 0 },
       average_duration: parseFloat(avgDuration),
-      success_rate: avgReturn // Average return percentage
+      success_rate: 0
     });
   };
 
   // --- STYLES ---
-  // Dark theme styles for filter inputs
   const inputStyle = {
     padding: '10px 14px',
     borderRadius: '8px',
@@ -247,6 +284,8 @@ const StaggeredChart = () => {
             type="date" 
             name="startDate" 
             value={filters.startDate} 
+            min={dateRange.min_date}
+            max={dateRange.max_date}
             onChange={handleFilterChange} 
             style={inputStyle}
             onMouseEnter={(e) => Object.assign(e.target.style, inputHoverStyle)}
@@ -258,7 +297,9 @@ const StaggeredChart = () => {
           <input 
             type="date" 
             name="endDate" 
-            value={filters.endDate} 
+            value={filters.endDate}
+            min={dateRange.min_date}
+            max={dateRange.max_date}
             onChange={handleFilterChange} 
             style={inputStyle}
             onMouseEnter={(e) => Object.assign(e.target.style, inputHoverStyle)}
@@ -302,10 +343,29 @@ const StaggeredChart = () => {
           </select>
         </div>
 
+        {/* Cooldown Weeks Dropdown */}
+        <div style={{ flex: '0 0 auto' }}>
+          <label style={labelStyle}>Cooldown Weeks</label>
+          <select 
+            name="cooldownWeeks" 
+            value={filters.cooldownWeeks} 
+            onChange={handleFilterChange} 
+            style={inputStyle}
+            onMouseEnter={(e) => Object.assign(e.target.style, inputHoverStyle)}
+            onMouseLeave={(e) => Object.assign(e.target.style, inputStyle)}
+          >
+            {Array.from({ length: 104 - 20 + 1 }, (_, i) => i + 20).map(week => (
+              <option key={week} value={week} style={{ backgroundColor: '#020617', color: '#e5e7eb' }}>
+                {week} weeks
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Reset Button */}
         <div style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
           <button 
-            onClick={() => setFilters({ startDate: '', endDate: '', sector: 'All', mcap: 'All' })}
+            onClick={handleReset}
             style={{
               padding: '10px 20px',
               borderRadius: '8px',
@@ -429,7 +489,7 @@ const StaggeredChart = () => {
             color: '#9ca3af',
             fontSize: '14px'
           }}>
-            Loading chart data...
+            Loading chart data for cooldown {filters.cooldownWeeks} weeks...
           </div>
         )}
 
