@@ -1,0 +1,8 @@
+# Data files (never commit)
+data/
+*.csv
+*.xlsx
+
+# Python
+__pycache__/
+*.pyc
