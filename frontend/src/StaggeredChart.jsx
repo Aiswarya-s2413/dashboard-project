@@ -20,6 +20,7 @@ const StaggeredChart = () => {
   const [error, setError] = useState(null);
   const [chartHeight, setChartHeight] = useState(600);
   const chartContainerRef = useRef(null);
+  
   const [kpiData, setKpiData] = useState({
     total_samples: 0,
     most_profitable: { name: 'N/A', return: 0 },
@@ -75,7 +76,6 @@ const StaggeredChart = () => {
         
         setDateRange({ min_date: min, max_date: max });
         
-        // This ensures the main data fetch triggers with the correct dates
         setFilters(prev => ({
           ...prev,
           startDate: min,
@@ -87,18 +87,17 @@ const StaggeredChart = () => {
 
   // 3. Fetch Chart and KPI Data
   useEffect(() => {
-    // GUARD: Prevent calls if filter state is currently empty/transitioning
+    // Guard against initial empty states
     if (!filters.startDate || !filters.endDate || !filters.weeks) return;
 
     setLoading(true);
     
-    // Explicitly mapping frontend state to backend query parameters
     const params = {
       start_date: filters.startDate,
       end_date: filters.endDate,
       sector: filters.sector,
       mcap: filters.mcap,
-      cooldown_weeks: filters.cooldownWeeks, // Standardized to match Django view
+      cooldown_weeks: filters.cooldownWeeks,
       weeks: filters.weeks
     };
 
@@ -268,7 +267,7 @@ const StaggeredChart = () => {
         </div>
         <div style={{ padding: '16px 20px', borderRadius: '12px', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.2)', backdropFilter: 'blur(8px)' }}>
           <div style={labelStyle}>Average Return</div>
-          <div style={{ fontSize: '24px', fontWeight: '600', color: '#82ca9d' }}>{kpiCode.success_rate}%</div>
+          <div style={{ fontSize: '24px', fontWeight: '600', color: '#82ca9d' }}>{kpiData.success_rate}%</div>
         </div>
       </div>
 
