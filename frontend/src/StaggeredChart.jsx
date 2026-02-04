@@ -39,7 +39,7 @@ const StaggeredChart = () => {
     sector: 'All',
     mcap: 'All',
     cooldownWeeks: 52, 
-    weeks: 52 // New state for Holding Weeks (5, 10, ..., 52)
+    weeks: 52 
   });
 
   const categoryColors = {
@@ -52,6 +52,7 @@ const StaggeredChart = () => {
 
   // --- API CALLS ---
 
+  // 1. Fetch Sectors once on mount
   useEffect(() => {
     axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
@@ -60,8 +61,8 @@ const StaggeredChart = () => {
       .catch(err => console.error("Error fetching sectors:", err));
   }, []);
 
+  // 2. Update Date Range whenever Weeks or Cooldown changes
   useEffect(() => {
-    // Passing both parameters to ensure the date range is accurate for the specific file
     axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
       params: { 
         cooldown_weeks: filters.cooldownWeeks,
@@ -69,30 +70,36 @@ const StaggeredChart = () => {
       }
     })
       .then(response => {
-        setDateRange({
-          min_date: response.data.min_date || '',
-          max_date: response.data.max_date || ''
-        });
+        const min = response.data.min_date || '';
+        const max = response.data.max_date || '';
         
+        setDateRange({ min_date: min, max_date: max });
+        
+        // This ensures the main data fetch triggers with the correct dates
         setFilters(prev => ({
           ...prev,
-          startDate: prev.startDate || response.data.min_date || '',
-          endDate: prev.endDate || response.data.max_date || ''
+          startDate: min,
+          endDate: max
         }));
       })
       .catch(err => console.error("Error fetching date range:", err));
   }, [filters.cooldownWeeks, filters.weeks]);
 
+  // 3. Fetch Chart and KPI Data
   useEffect(() => {
+    // GUARD: Prevent calls if filter state is currently empty/transitioning
+    if (!filters.startDate || !filters.endDate || !filters.weeks) return;
+
     setLoading(true);
     
+    // Explicitly mapping frontend state to backend query parameters
     const params = {
       start_date: filters.startDate,
       end_date: filters.endDate,
       sector: filters.sector,
       mcap: filters.mcap,
-      cooldown: filters.cooldownWeeks, // Mapped to backend 'cooldown'
-      weeks: filters.weeks            // Mapped to backend 'weeks'
+      cooldown_weeks: filters.cooldownWeeks, // Standardized to match Django view
+      weeks: filters.weeks
     };
 
     Promise.allSettled([
@@ -122,7 +129,9 @@ const StaggeredChart = () => {
         setError("Error fetching data.");
         setLoading(false);
       });
-  }, [filters]);
+  }, [filters.startDate, filters.endDate, filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks]);
+
+  // --- UI LOGIC ---
 
   useEffect(() => {
     const updateHeight = () => {
@@ -137,7 +146,7 @@ const StaggeredChart = () => {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', updateHeight);
     };
-  }, [loading, error, data]);
+  }, [loading, data]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -154,6 +163,8 @@ const StaggeredChart = () => {
       weeks: 52
     });
   };
+
+  // --- STYLES ---
 
   const inputStyle = {
     padding: '10px 14px',
@@ -177,16 +188,14 @@ const StaggeredChart = () => {
     display: 'block'
   };
 
-  // Generate options for Weeks (5, 10, 15, ..., 45, 52)
   const weekOptions = [26, 52, 78, 104, 156, 208];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, overflow: 'hidden', backgroundColor: '#020617' }}>
       
       {/* 1. FILTER BAR SECTION */}
       <div style={{ padding: '20px 24px', backgroundColor: 'rgba(15, 23, 42, 0.4)', borderBottom: '1px solid rgba(148, 163, 184, 0.2)', display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'flex-end', backdropFilter: 'blur(12px)', position: 'relative', zIndex: 10 }}>
         
-        {/* Weeks Option Dropdown */}
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>Weeks</label>
           <select name="weeks" value={filters.weeks} onChange={handleFilterChange} style={inputStyle}>
@@ -196,7 +205,6 @@ const StaggeredChart = () => {
           </select>
         </div>
 
-        {/* Cooldown Weeks Dropdown */}
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>Cooldown</label>
           <select name="cooldownWeeks" value={filters.cooldownWeeks} onChange={handleFilterChange} style={inputStyle}>
@@ -260,19 +268,19 @@ const StaggeredChart = () => {
         </div>
         <div style={{ padding: '16px 20px', borderRadius: '12px', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.2)', backdropFilter: 'blur(8px)' }}>
           <div style={labelStyle}>Average Return</div>
-          <div style={{ fontSize: '24px', fontWeight: '600', color: '#82ca9d' }}>{kpiData.success_rate}%</div>
+          <div style={{ fontSize: '24px', fontWeight: '600', color: '#82ca9d' }}>{kpiCode.success_rate}%</div>
         </div>
       </div>
 
       {/* 3. CHART SECTION */}
       <div style={{ flex: 1, minHeight: 0, padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {loading && (
+        {loading ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#9ca3af', fontSize: '14px' }}>
             Loading {filters.weeks} weeks data with cooldown {filters.cooldownWeeks}...
           </div>
-        )}
-        {error && <div style={{ textAlign: 'center', marginTop: '50px', color: '#f87171', fontSize: '14px' }}>{error}</div>}
-        {!loading && !error && (
+        ) : error ? (
+          <div style={{ textAlign: 'center', marginTop: '50px', color: '#f87171', fontSize: '14px' }}>{error}</div>
+        ) : (
           <div ref={chartContainerRef} style={{ width: '100%', height: '100%', flex: 1, minHeight: 400 }}>
             <ResponsiveContainer width="100%" height={chartHeight}>
               <BarChart data={data} margin={{ top: 10, right: 24, left: 4, bottom: 32 }}>
