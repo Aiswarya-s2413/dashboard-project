@@ -11,9 +11,10 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -25,7 +26,12 @@ SECRET_KEY = 'django-insecure-*5yf*!-j3muu5&qn5v-nqhux+ma69d_io87%z_*m+!ya2wlu=+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "dashboard.aiswaryasathyan.space",
+    "www.dashboard.aiswaryasathyan.space",
+    "localhost",
+    "127.0.0.1",
+]
 
 
 # Application definition
@@ -44,7 +50,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', # Add this
-    'django.middleware.security.SecurityMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -79,8 +84,12 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',     
+        'USER': 'postgres',      
+        'PASSWORD': 'yourpassword',
+        'HOST': 'localhost',     
+        'PORT': '5432',
     }
 }
 
@@ -123,4 +132,25 @@ STATIC_URL = 'static/'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    'https://dashboard-project-navy-three.vercel.app',
 ]
+
+
+STATIC_URL = '/static/'
+
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/var/tmp/django_cache',
+        'TIMEOUT': 300,  # Cache timeout in seconds (5 minutes)
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}
+

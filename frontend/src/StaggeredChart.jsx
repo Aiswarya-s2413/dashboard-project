@@ -53,7 +53,7 @@ const StaggeredChart = () => {
   // --- API CALLS ---
 
   useEffect(() => {
-    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
+    axios.get('http://127.0.0.1:8001/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
@@ -62,7 +62,7 @@ const StaggeredChart = () => {
 
   useEffect(() => {
     // Passing both parameters to ensure the date range is accurate for the specific file
-    axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
+    axios.get('http://127.0.0.1:8001/api/date-range/', {
       params: { 
         cooldown_weeks: filters.cooldownWeeks,
         weeks: filters.weeks 
@@ -96,8 +96,8 @@ const StaggeredChart = () => {
     };
 
     Promise.allSettled([
-      axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params }),
-      axios.get('https://dashboard.aiswaryasathyan.space/api/kpi-data/', { params })
+      axios.get('http://127.0.0.1:8001/api/chart-data/', { params }),
+      axios.get('http://127.0.0.1:8001/api/kpi-data/', { params })
     ])
       .then(([chartResult, kpiResult]) => {
         if (chartResult.status === 'fulfilled') {
@@ -178,7 +178,7 @@ const StaggeredChart = () => {
   };
 
   // Generate options for Weeks (5, 10, 15, ..., 45, 52)
-  const weekOptions = [...Array.from({ length: 9 }, (_, i) => (i + 1) * 5), 52];
+  const weekOptions = [26, 52, 78, 104, 156, 208];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, overflow: 'hidden' }}>
