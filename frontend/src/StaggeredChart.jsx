@@ -53,7 +53,7 @@ const StaggeredChart = () => {
   // --- API CALLS ---
 
   useEffect(() => {
-    axios.get('http://127.0.0.1:8001/api/sectors/')
+    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
@@ -62,7 +62,7 @@ const StaggeredChart = () => {
 
   useEffect(() => {
     // Passing both parameters to ensure the date range is accurate for the specific file
-    axios.get('http://127.0.0.1:8001/api/date-range/', {
+    axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
       params: { 
         cooldown_weeks: filters.cooldownWeeks,
         weeks: filters.weeks 
@@ -96,8 +96,8 @@ const StaggeredChart = () => {
     };
 
     Promise.allSettled([
-      axios.get('http://127.0.0.1:8001/api/chart-data/', { params }),
-      axios.get('http://127.0.0.1:8001/api/kpi-data/', { params })
+      axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params }),
+      axios.get('https://dashboard.aiswaryasathyan.space/api/kpi-data/', { params })
     ])
       .then(([chartResult, kpiResult]) => {
         if (chartResult.status === 'fulfilled') {
