@@ -192,11 +192,18 @@ class KPIDataView(APIView):
                 })
             
             # Separate query for most profitable (only fetch needed fields)
-            most_profitable = queryset.only(
+            # Exclude NaNs explicitly using filter (NaN is greater than Inf in Postgres)
+            most_profitable = queryset.filter(
+                return_percentage__isnull=False,
+                return_percentage__lt=float('inf')
+            ).only(
                 'company', 'symbol', 'return_percentage'
             ).order_by('-return_percentage').first()
             
             total_duration = aggregated['total_duration'] or 0
+            if math.isnan(total_duration):
+                total_duration = 0
+            
             successful = aggregated['successful'] or 0
             
             return Response({

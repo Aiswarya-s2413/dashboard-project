@@ -55,7 +55,7 @@ const StaggeredChart = () => {
 
   // 1. Fetch Sectors once on mount
   useEffect(() => {
-    axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
+    axios.get('http://127.0.0.1:8000/api/sectors/')
       .then(response => {
         setSectors(['All', ...response.data]);
       })
@@ -64,7 +64,7 @@ const StaggeredChart = () => {
 
   // 2. Update Date Range whenever Weeks or Cooldown changes
   useEffect(() => {
-    axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
+    axios.get('http://127.0.0.1:8000/api/date-range/', {
       params: { 
         cooldown_weeks: filters.cooldownWeeks,
         weeks: filters.weeks 
@@ -102,8 +102,8 @@ const StaggeredChart = () => {
     };
 
     Promise.allSettled([
-      axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params }),
-      axios.get('https://dashboard.aiswaryasathyan.space/api/kpi-data/', { params })
+      axios.get('http://127.0.0.1:8000/api/chart-data/', { params }),
+      axios.get('http://127.0.0.1:8000/api/kpi-data/', { params })
     ])
       .then(([chartResult, kpiResult]) => {
         if (chartResult.status === 'fulfilled') {
