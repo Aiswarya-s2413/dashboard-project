@@ -20,7 +20,6 @@ const StaggeredChart = () => {
   const [error, setError] = useState(null);
   const [chartHeight, setChartHeight] = useState(600);
   const chartContainerRef = useRef(null);
-  const [initialized, setInitialized] = useState(false);
   
   const [kpiData, setKpiData] = useState({
     total_samples: 0,
@@ -30,14 +29,14 @@ const StaggeredChart = () => {
   });
 
   const [dateRange, setDateRange] = useState({
-    min_date: null,
-    max_date: null
+    min_date: '',
+    max_date: ''
   });
 
-  // Filter State - Changed to null instead of empty strings
+  // Filter State
   const [filters, setFilters] = useState({
-    startDate: null,
-    endDate: null,
+    startDate: '',
+    endDate: '',
     sector: 'All',
     mcap: 'All',
     cooldownWeeks: 52, 
@@ -72,37 +71,25 @@ const StaggeredChart = () => {
       }
     })
       .then(response => {
-        const min = response.data.min_date;
-        const max = response.data.max_date;
+        const min = response.data.min_date || '';
+        const max = response.data.max_date || '';
         
-        console.log('Date range received:', { min, max });
+        setDateRange({ min_date: min, max_date: max });
         
-        if (min && max) {
-          setDateRange({ min_date: min, max_date: max });
-          
-          // Only set dates if they're not already set
-          setFilters(prev => ({
-            ...prev,
-            startDate: prev.startDate || min,
-            endDate: prev.endDate || max
-          }));
-          
-          setInitialized(true);
-        }
+        setFilters(prev => ({
+          ...prev,
+          startDate: min,
+          endDate: max
+        }));
       })
       .catch(err => console.error("Error fetching date range:", err));
   }, [filters.cooldownWeeks, filters.weeks]);
 
-  // 3. Fetch Chart and KPI Data - Only after initialization
+  // 3. Fetch Chart and KPI Data
   useEffect(() => {
-    // Don't fetch until we have valid dates and are initialized
-    if (!initialized || !filters.startDate || !filters.endDate) {
-      console.log('Skipping fetch - not initialized yet or missing dates');
-      return;
-    }
+    // Guard against initial empty states
+    if (!filters.startDate || !filters.endDate || !filters.weeks) return;
 
-    console.log('Fetching data with filters:', filters);
-    
     setLoading(true);
     
     const params = {
@@ -120,37 +107,28 @@ const StaggeredChart = () => {
     ])
       .then(([chartResult, kpiResult]) => {
         if (chartResult.status === 'fulfilled') {
-          console.log('Chart data received');
           setData(chartResult.value.data);
           setError(null);
         } else {
-          console.error('Chart error:', chartResult.reason);
           setError("Could not load chart data.");
         }
 
         if (kpiResult.status === 'fulfilled') {
-          const res = kpiResult.value.data;
-          console.log('KPI data received:', res);
+          const kpiResponse = kpiResult.value.data;
           setKpiData({
-            total_samples: res.total_samples || 0,
-            most_profitable: {
-              name: res.most_profitable?.name || 'N/A',
-              return: res.most_profitable?.return || 0
-            },
-            average_duration: res.average_duration || 0,
-            success_rate: res.success_rate || 0
+            total_samples: kpiResponse.total_samples || 0,
+            most_profitable: kpiResponse.most_profitable || { name: 'N/A', return: 0 },
+            average_duration: kpiResponse.average_duration || 0,
+            success_rate: kpiResponse.success_rate || 0
           });
-        } else {
-          console.error('KPI error:', kpiResult.reason);
         }
         setLoading(false);
       })
       .catch(err => {
-        console.error('Fetch error:', err);
         setError("Error fetching data.");
         setLoading(false);
       });
-  }, [initialized, filters.startDate, filters.endDate, filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks]);
+  }, [filters.startDate, filters.endDate, filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks]);
 
   // --- UI LOGIC ---
 
@@ -176,8 +154,8 @@ const StaggeredChart = () => {
 
   const handleReset = () => {
     setFilters({ 
-      startDate: dateRange.min_date, 
-      endDate: dateRange.max_date, 
+      startDate: dateRange.min_date || '', 
+      endDate: dateRange.max_date || '', 
       sector: 'All', 
       mcap: 'All', 
       cooldownWeeks: 52,
@@ -237,27 +215,11 @@ const StaggeredChart = () => {
 
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>From Date</label>
-          <input 
-            type="date" 
-            name="startDate" 
-            value={filters.startDate || ''} 
-            min={dateRange.min_date || ''} 
-            max={dateRange.max_date || ''} 
-            onChange={handleFilterChange} 
-            style={inputStyle} 
-          />
+          <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} style={inputStyle} />
         </div>
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>To Date</label>
-          <input 
-            type="date" 
-            name="endDate" 
-            value={filters.endDate || ''} 
-            min={dateRange.min_date || ''} 
-            max={dateRange.max_date || ''} 
-            onChange={handleFilterChange} 
-            style={inputStyle} 
-          />
+          <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} style={inputStyle} />
         </div>
 
         <div style={{ flex: '0 0 auto' }}>
@@ -313,7 +275,7 @@ const StaggeredChart = () => {
       <div style={{ flex: 1, minHeight: 0, padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#9ca3af', fontSize: '14px' }}>
-            Loading data...
+            Loading {filters.weeks} weeks data with cooldown {filters.cooldownWeeks}...
           </div>
         ) : error ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#f87171', fontSize: '14px' }}>{error}</div>
