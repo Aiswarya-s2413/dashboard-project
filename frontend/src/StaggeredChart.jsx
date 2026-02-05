@@ -86,26 +86,30 @@ const StaggeredChart = () => {
   }, [filters.cooldownWeeks, filters.weeks]);
 
   // 3. Fetch Chart and KPI Data
-  useEffect(() => {
-    // Guard against initial empty states
-    if (!filters.startDate || !filters.endDate || !filters.weeks) return;
+useEffect(() => {
+    // Only skip if we truly have no configuration
+    if (!filters.weeks || !filters.cooldownWeeks) return;
 
     setLoading(true);
     
     const params = {
-      start_date: filters.startDate,
-      end_date: filters.endDate,
+      start_date: filters.startDate || undefined,
+      end_date: filters.endDate || undefined,
       sector: filters.sector,
       mcap: filters.mcap,
       cooldown_weeks: filters.cooldownWeeks,
       weeks: filters.weeks
     };
 
+    console.log('Fetching with params:', params);
+
     Promise.allSettled([
       axios.get('https://dashboard.aiswaryasathyan.space/api/chart-data/', { params }),
       axios.get('https://dashboard.aiswaryasathyan.space/api/kpi-data/', { params })
     ])
       .then(([chartResult, kpiResult]) => {
+        console.log('KPI result:', kpiResult);
+        
         if (chartResult.status === 'fulfilled') {
           setData(chartResult.value.data);
           setError(null);
@@ -115,9 +119,9 @@ const StaggeredChart = () => {
 
         if (kpiResult.status === 'fulfilled') {
             const res = kpiResult.value.data;
+            console.log('KPI data received:', res);
             setKpiData({
               total_samples: res.total_samples || 0,
-              // Ensure you access the nested 'name' and 'return' keys
               most_profitable: {
                   name: res.most_profitable?.name || 'N/A',
                   return: res.most_profitable?.return || 0
@@ -125,15 +129,15 @@ const StaggeredChart = () => {
               average_duration: res.average_duration || 0,
               success_rate: res.success_rate || 0
             });
-}
+        }
         setLoading(false);
       })
       .catch(err => {
+        console.error('Fetch error:', err);
         setError("Error fetching data.");
         setLoading(false);
       });
-  }, [filters.startDate, filters.endDate, filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks]);
-
+  }, [filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks, filters.startDate, filters.endDate]);
   // --- UI LOGIC ---
 
   useEffect(() => {
