@@ -106,61 +106,59 @@ class KPIDataView(APIView):
             # Apply same UI Filters
             start = request.query_params.get("start_date")
             end = request.query_params.get("end_date")
-            if start: queryset = queryset.filter(breakout_date__gte=start)
-            if end: queryset = queryset.filter(breakout_date__lte=end)
+            if start: 
+                queryset = queryset.filter(breakout_date__gte=start)
+            if end: 
+                queryset = queryset.filter(breakout_date__lte=end)
             
             sector = request.query_params.get("sector")
-            if sector and sector != "All": queryset = queryset.filter(sector=sector)
+            if sector and sector != "All": 
+                queryset = queryset.filter(sector=sector)
 
             mcap = request.query_params.get("mcap")
-            if mcap and mcap != "All": queryset = queryset.filter(mcap_category=mcap)
+            if mcap and mcap != "All": 
+                queryset = queryset.filter(mcap_category=mcap)
 
             # Filter for successful trades only (>= 20% return)
             queryset = queryset.filter(return_percentage__gte=20)
 
             total = queryset.count()
             
-            if total > 0:
-                # Find best performing stock
-                best_stock = queryset.order_by('-return_percentage').first()
-                
-                # Calculate averages
-                metrics = queryset.aggregate(
-                    avg_duration=Avg('duration'),
-                    avg_return=Avg('return_percentage')
-                )
-                
-                # Safely extract values and handle None/NaN
-                avg_duration = metrics.get('avg_duration', 0)
-                avg_return = metrics.get('avg_return', 0)
-                
-                # Check for None or NaN and convert to 0
-                if avg_duration is None or (isinstance(avg_duration, float) and math.isnan(avg_duration)):
-                    avg_duration = 0
-                if avg_return is None or (isinstance(avg_return, float) and math.isnan(avg_return)):
-                    avg_return = 0
-                
+            # Handle empty queryset
+            if total == 0:
                 return Response({
-                    "total_samples": total,
-                    "most_profitable": {
-                        "name": best_stock.symbol, 
-                        "return": round(float(best_stock.return_percentage), 2)
-                    },
-                    "average_duration": round(float(avg_duration), 1),
-                    "success_rate": round(float(avg_return), 1)
+                    "total_samples": 0, 
+                    "most_profitable": {"name": "N/A", "return": 0}, 
+                    "average_duration": 0, 
+                    "success_rate": 0
                 })
             
-            # Return zeros if no data
+            # Get best performing stock
+            best_stock = queryset.order_by('-return_percentage').first()
+            
+            # Get all values as lists to calculate averages manually
+            durations = list(queryset.values_list('duration', flat=True))
+            returns = list(queryset.values_list('return_percentage', flat=True))
+            
+            # Calculate averages manually (avoids NaN issues)
+            avg_duration = sum(durations) / len(durations) if durations else 0
+            avg_return = sum(returns) / len(returns) if returns else 0
+            
             return Response({
-                "total_samples": 0, 
-                "most_profitable": {"name": "N/A", "return": 0}, 
-                "average_duration": 0, 
-                "success_rate": 0
+                "total_samples": total,
+                "most_profitable": {
+                    "name": best_stock.symbol, 
+                    "return": round(float(best_stock.return_percentage), 2)
+                },
+                "average_duration": round(float(avg_duration), 1),
+                "success_rate": round(float(avg_return), 1)
             })
             
         except Exception as e:
-            # Always return valid JSON even on error
+            # Log error and return safe defaults
+            import traceback
             print(f"KPI Error: {str(e)}")
+            print(traceback.format_exc())
             return Response({
                 "total_samples": 0, 
                 "most_profitable": {"name": "N/A", "return": 0}, 
