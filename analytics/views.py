@@ -150,3 +150,53 @@ class KPIDataView(APIView):
             })
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+        
+class DebugDataView(APIView):
+    """Debug endpoint to see what's in the database"""
+    def get(self, request):
+        holding_weeks = request.query_params.get("weeks", 52)
+        cooldown = request.query_params.get("cooldown_weeks", 52)
+        
+        # Check total records
+        total_records = TradingData.objects.count()
+        
+        # Check records matching weeks/cooldown
+        matching_config = TradingData.objects.filter(
+            holding_weeks=holding_weeks,
+            cooldown_setting=cooldown
+        ).count()
+        
+        # Check with date filters
+        start = request.query_params.get("start_date")
+        end = request.query_params.get("end_date")
+        
+        queryset = TradingData.objects.filter(
+            holding_weeks=holding_weeks,
+            cooldown_setting=cooldown
+        )
+        
+        if start: 
+            queryset = queryset.filter(breakout_date__gte=start)
+        if end: 
+            queryset = queryset.filter(breakout_date__lte=end)
+        
+        with_dates = queryset.count()
+        successful = queryset.filter(return_percentage__gte=20).count()
+        
+        # Get sample data
+        sample = list(queryset.values(
+            'symbol', 'holding_weeks', 'cooldown_setting', 
+            'breakout_date', 'return_percentage'
+        )[:5])
+        
+        return Response({
+            "total_in_db": total_records,
+            "matching_weeks_cooldown": matching_config,
+            "after_date_filter": with_dates,
+            "successful_trades": successful,
+            "requested_weeks": holding_weeks,
+            "requested_cooldown": cooldown,
+            "start_date": start,
+            "end_date": end,
+            "sample_records": sample
+        })
