@@ -119,6 +119,9 @@ class KPIDataView(APIView):
             mcap = request.query_params.get("mcap")
             if mcap and mcap != "All": queryset = queryset.filter(mcap_category=mcap)
 
+            # ADD THIS LINE - Filter for successful trades only (>= 20% return)
+            queryset = queryset.filter(return_percentage__gte=20)
+
             total = queryset.count()
             if total > 0:
                 # Find best performing stock
