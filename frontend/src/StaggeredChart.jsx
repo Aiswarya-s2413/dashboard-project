@@ -1,10 +1,19 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Label
 } from 'recharts';
 
 const StaggeredChart = () => {
+  // --- STATE MANAGEMENT ---
   const [data, setData] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,13 +34,14 @@ const StaggeredChart = () => {
     max_date: null
   });
 
+  // Filter State - Changed to null instead of empty strings
   const [filters, setFilters] = useState({
     startDate: null,
     endDate: null,
     sector: 'All',
     mcap: 'All',
     cooldownWeeks: 52, 
-    weeks: 52
+    weeks: 52 
   });
 
   const categoryColors = {
@@ -42,14 +52,18 @@ const StaggeredChart = () => {
     '>100%': '#d0ed57'
   };
 
-  // 1. Fetch Sectors
+  // --- API CALLS ---
+
+  // 1. Fetch Sectors once on mount
   useEffect(() => {
     axios.get('https://dashboard.aiswaryasathyan.space/api/sectors/')
-      .then(response => setSectors(['All', ...response.data]))
+      .then(response => {
+        setSectors(['All', ...response.data]);
+      })
       .catch(err => console.error("Error fetching sectors:", err));
   }, []);
 
-  // 2. Fetch Date Range and initialize filters
+  // 2. Update Date Range whenever Weeks or Cooldown changes
   useEffect(() => {
     axios.get('https://dashboard.aiswaryasathyan.space/api/date-range/', {
       params: { 
@@ -79,14 +93,16 @@ const StaggeredChart = () => {
       .catch(err => console.error("Error fetching date range:", err));
   }, [filters.cooldownWeeks, filters.weeks]);
 
-  // 3. Fetch Data - only after initialization
+  // 3. Fetch Chart and KPI Data - Only after initialization
   useEffect(() => {
+    // Don't fetch until we have valid dates and are initialized
     if (!initialized || !filters.startDate || !filters.endDate) {
-      console.log('Skipping fetch - not initialized yet');
+      console.log('Skipping fetch - not initialized yet or missing dates');
       return;
     }
 
     console.log('Fetching data with filters:', filters);
+    
     setLoading(true);
     
     const params = {
@@ -104,7 +120,7 @@ const StaggeredChart = () => {
     ])
       .then(([chartResult, kpiResult]) => {
         if (chartResult.status === 'fulfilled') {
-          console.log('Chart data:', chartResult.value.data);
+          console.log('Chart data received');
           setData(chartResult.value.data);
           setError(null);
         } else {
@@ -136,7 +152,8 @@ const StaggeredChart = () => {
       });
   }, [initialized, filters.startDate, filters.endDate, filters.sector, filters.mcap, filters.cooldownWeeks, filters.weeks]);
 
-  // Chart height
+  // --- UI LOGIC ---
+
   useEffect(() => {
     const updateHeight = () => {
       if (chartContainerRef.current) {
@@ -168,6 +185,8 @@ const StaggeredChart = () => {
     });
   };
 
+  // --- STYLES ---
+
   const inputStyle = {
     padding: '10px 14px',
     borderRadius: '8px',
@@ -195,6 +214,7 @@ const StaggeredChart = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minHeight: 0, overflow: 'hidden', backgroundColor: '#020617' }}>
       
+      {/* 1. FILTER BAR SECTION */}
       <div style={{ padding: '20px 24px', backgroundColor: 'rgba(15, 23, 42, 0.4)', borderBottom: '1px solid rgba(148, 163, 184, 0.2)', display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'flex-end', backdropFilter: 'blur(12px)', position: 'relative', zIndex: 10 }}>
         
         <div style={{ flex: '0 0 auto' }}>
@@ -217,11 +237,27 @@ const StaggeredChart = () => {
 
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>From Date</label>
-          <input type="date" name="startDate" value={filters.startDate || ''} min={dateRange.min_date || ''} max={dateRange.max_date || ''} onChange={handleFilterChange} style={inputStyle} />
+          <input 
+            type="date" 
+            name="startDate" 
+            value={filters.startDate || ''} 
+            min={dateRange.min_date || ''} 
+            max={dateRange.max_date || ''} 
+            onChange={handleFilterChange} 
+            style={inputStyle} 
+          />
         </div>
         <div style={{ flex: '0 0 auto' }}>
           <label style={labelStyle}>To Date</label>
-          <input type="date" name="endDate" value={filters.endDate || ''} min={dateRange.min_date || ''} max={dateRange.max_date || ''} onChange={handleFilterChange} style={inputStyle} />
+          <input 
+            type="date" 
+            name="endDate" 
+            value={filters.endDate || ''} 
+            min={dateRange.min_date || ''} 
+            max={dateRange.max_date || ''} 
+            onChange={handleFilterChange} 
+            style={inputStyle} 
+          />
         </div>
 
         <div style={{ flex: '0 0 auto' }}>
@@ -251,6 +287,7 @@ const StaggeredChart = () => {
         </div>
       </div>
 
+      {/* 2. KPI BOXES SECTION */}
       <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', backgroundColor: 'rgba(15, 23, 42, 0.3)', borderBottom: '1px solid rgba(148, 163, 184, 0.2)' }}>
         <div style={{ padding: '16px 20px', borderRadius: '12px', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.2)', backdropFilter: 'blur(8px)' }}>
           <div style={labelStyle}>Total Samples</div>
@@ -272,6 +309,7 @@ const StaggeredChart = () => {
         </div>
       </div>
 
+      {/* 3. CHART SECTION */}
       <div style={{ flex: 1, minHeight: 0, padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#9ca3af', fontSize: '14px' }}>
