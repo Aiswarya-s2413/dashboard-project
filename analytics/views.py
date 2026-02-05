@@ -4,48 +4,48 @@ from django.db.models import Avg, Max, Count, Q
 from .models import TradingData
 import pandas as pd
 from django.db import models
-
-
-class SectorListView(APIView):
-    """Returns unique sectors from the database"""
-    def get(self, request):
-        # We get distinct sectors available in the whole dataset
-        sectors = TradingData.objects.values_list('sector', flat=True).distinct().order_by('sector')
-        return Response(list(sectors))
+import math
 
 class DateRangeView(APIView):
     """Returns min and max dates for the specific selected file/cooldown from Database"""
     def get(self, request):
-        holding_weeks = int(request.query_params.get("weeks", 52))
-        cooldown = int(request.query_params.get("cooldown_weeks", 52))
-        
-        queryset = TradingData.objects.filter(
-            holding_weeks=holding_weeks,
-            cooldown_setting=cooldown
-        )
-        
-        if not queryset.exists():
-            return Response({"min_date": None, "max_date": None})
-        
-        stats = queryset.aggregate(
-            min_date=models.Min('breakout_date'), 
-            max_date=models.Max('breakout_date')
-        )
+        try:
+            holding_weeks = int(request.query_params.get("weeks", 52))
+            cooldown = int(request.query_params.get("cooldown_weeks", 52))
+            
+            queryset = TradingData.objects.filter(
+                holding_weeks=holding_weeks,
+                cooldown_setting=cooldown
+            )
+            
+            if not queryset.exists():
+                return Response({"min_date": None, "max_date": None})
+            
+            stats = queryset.aggregate(
+                min_date=models.Min('breakout_date'), 
+                max_date=models.Max('breakout_date')
+            )
 
-        return Response({
-            "min_date": stats['min_date'].strftime('%Y-%m-%d') if stats['min_date'] else None,
-            "max_date": stats['max_date'].strftime('%Y-%m-%d') if stats['max_date'] else None
-        })
+            return Response({
+                "min_date": stats['min_date'].strftime('%Y-%m-%d') if stats['min_date'] else None,
+                "max_date": stats['max_date'].strftime('%Y-%m-%d') if stats['max_date'] else None
+            })
+        except Exception as e:
+            return Response({"min_date": None, "max_date": None})
+
+class SectorListView(APIView):
+    """Returns unique sectors from the database"""
+    def get(self, request):
+        sectors = TradingData.objects.values_list('sector', flat=True).distinct().order_by('sector')
+        return Response(list(sectors))
 
 class DashboardDataView(APIView):
     """Returns the filtered graph data using Database queries"""
     def get(self, request):
         try:
-            # Convert to int
             holding_weeks = int(request.query_params.get("weeks", 52))
             cooldown = int(request.query_params.get("cooldown_weeks", 52))
             
-            # Base filtering
             queryset = TradingData.objects.filter(
                 holding_weeks=holding_weeks,
                 cooldown_setting=cooldown
@@ -71,7 +71,6 @@ class DashboardDataView(APIView):
             if not success_data.exists():
                 return Response([])
 
-            # Convert to DataFrame just for the bucketing logic (it's faster for grouping)
             df = pd.DataFrame(list(success_data))
             df["duration_rounded"] = df["duration"].round().astype(int)
             
@@ -96,7 +95,6 @@ class KPIDataView(APIView):
     """Returns KPI metrics from the Database"""
     def get(self, request):
         try:
-            # Convert to int
             holding_weeks = int(request.query_params.get("weeks", 52))
             cooldown = int(request.query_params.get("cooldown_weeks", 52))
             
@@ -108,18 +106,14 @@ class KPIDataView(APIView):
             # Apply same UI Filters
             start = request.query_params.get("start_date")
             end = request.query_params.get("end_date")
-            if start: 
-                queryset = queryset.filter(breakout_date__gte=start)
-            if end: 
-                queryset = queryset.filter(breakout_date__lte=end)
+            if start: queryset = queryset.filter(breakout_date__gte=start)
+            if end: queryset = queryset.filter(breakout_date__lte=end)
             
             sector = request.query_params.get("sector")
-            if sector and sector != "All": 
-                queryset = queryset.filter(sector=sector)
+            if sector and sector != "All": queryset = queryset.filter(sector=sector)
 
             mcap = request.query_params.get("mcap")
-            if mcap and mcap != "All": 
-                queryset = queryset.filter(mcap_category=mcap)
+            if mcap and mcap != "All": queryset = queryset.filter(mcap_category=mcap)
 
             # Filter for successful trades only (>= 20% return)
             queryset = queryset.filter(return_percentage__gte=20)
@@ -130,27 +124,27 @@ class KPIDataView(APIView):
                 # Find best performing stock
                 best_stock = queryset.order_by('-return_percentage').first()
                 
-                # Calculate averages with NULL handling
+                # Calculate averages
                 metrics = queryset.aggregate(
                     avg_duration=Avg('duration'),
                     avg_return=Avg('return_percentage')
                 )
                 
-                # Handle potential None/NaN values
-                avg_duration = metrics['avg_duration']
-                avg_return = metrics['avg_return']
+                # Safely extract values and handle None/NaN
+                avg_duration = metrics.get('avg_duration', 0)
+                avg_return = metrics.get('avg_return', 0)
                 
-                # Convert None to 0, handle NaN
-                if avg_duration is None or pd.isna(avg_duration):
+                # Check for None or NaN and convert to 0
+                if avg_duration is None or (isinstance(avg_duration, float) and math.isnan(avg_duration)):
                     avg_duration = 0
-                if avg_return is None or pd.isna(avg_return):
+                if avg_return is None or (isinstance(avg_return, float) and math.isnan(avg_return)):
                     avg_return = 0
                 
                 return Response({
                     "total_samples": total,
                     "most_profitable": {
-                        "name": best_stock.symbol if best_stock else "N/A", 
-                        "return": round(best_stock.return_percentage, 2) if best_stock else 0
+                        "name": best_stock.symbol, 
+                        "return": round(float(best_stock.return_percentage), 2)
                     },
                     "average_duration": round(float(avg_duration), 1),
                     "success_rate": round(float(avg_return), 1)
@@ -165,11 +159,11 @@ class KPIDataView(APIView):
             })
             
         except Exception as e:
-            # Log the error for debugging
+            # Always return valid JSON even on error
             print(f"KPI Error: {str(e)}")
             return Response({
                 "total_samples": 0, 
                 "most_profitable": {"name": "N/A", "return": 0}, 
                 "average_duration": 0, 
                 "success_rate": 0
-            }, status=200)  # Return 200 with empty data instead of 500
+            })
