@@ -92,76 +92,64 @@ class DashboardDataView(APIView):
             return Response({"error": str(e)}, status=500)
 
 class KPIDataView(APIView):
-    """Returns KPI metrics from the Database"""
     def get(self, request):
-        try:
-            holding_weeks = int(request.query_params.get("weeks", 52))
-            cooldown = int(request.query_params.get("cooldown_weeks", 52))
-            
-            queryset = TradingData.objects.filter(
-                holding_weeks=holding_weeks,
-                cooldown_setting=cooldown
-            )
-
-            # Apply same UI Filters
-            start = request.query_params.get("start_date")
-            end = request.query_params.get("end_date")
-            if start: 
-                queryset = queryset.filter(breakout_date__gte=start)
-            if end: 
-                queryset = queryset.filter(breakout_date__lte=end)
-            
-            sector = request.query_params.get("sector")
-            if sector and sector != "All": 
-                queryset = queryset.filter(sector=sector)
-
-            mcap = request.query_params.get("mcap")
-            if mcap and mcap != "All": 
-                queryset = queryset.filter(mcap_category=mcap)
-
-            # Filter for successful trades only (>= 20% return)
-            queryset = queryset.filter(return_percentage__gte=20)
-
-            total = queryset.count()
-            
-            # Handle empty queryset
-            if total == 0:
-                return Response({
-                    "total_samples": 0, 
-                    "most_profitable": {"name": "N/A", "return": 0}, 
-                    "average_duration": 0, 
-                    "success_rate": 0
-                })
-            
-            # Get best performing stock
-            best_stock = queryset.order_by('-return_percentage').first()
-            
-            # Get all values as lists to calculate averages manually
-            durations = list(queryset.values_list('duration', flat=True))
-            returns = list(queryset.values_list('return_percentage', flat=True))
-            
-            # Calculate averages manually (avoids NaN issues)
-            avg_duration = sum(durations) / len(durations) if durations else 0
-            avg_return = sum(returns) / len(returns) if returns else 0
-            
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        sector = request.GET.get('sector', 'All')
+        mcap = request.GET.get('mcap', 'All')
+        cooldown_weeks = request.GET.get('cooldown_weeks')
+        weeks = request.GET.get('weeks')
+        
+        # Start with all data
+        queryset = TradingData.objects.all()
+        
+        # Apply required filters
+        if cooldown_weeks:
+            queryset = queryset.filter(cooldown_setting=int(cooldown_weeks))
+        
+        if weeks:
+            queryset = queryset.filter(holding_weeks=int(weeks))
+        
+        # Apply optional filters only if they don't make queryset empty
+        if sector and sector != 'All':
+            filtered = queryset.filter(sector=sector)
+            if filtered.exists():
+                queryset = filtered
+        
+        if mcap and mcap != 'All':
+            filtered = queryset.filter(mcap_category=mcap)
+            if filtered.exists():
+                queryset = filtered
+        
+        # Try to apply date filter, but keep all data if it results in empty
+        if start_date and end_date:
+            filtered = queryset.filter(breakout_date__range=[start_date, end_date])
+            if filtered.exists():
+                queryset = filtered
+        
+        # Now calculate with whatever data we have
+        count = queryset.count()
+        
+        if count == 0:
+            # Absolutely no data in database
             return Response({
-                "total_samples": total,
-                "most_profitable": {
-                    "name": best_stock.symbol, 
-                    "return": round(float(best_stock.return_percentage), 2)
-                },
-                "average_duration": round(float(avg_duration), 1),
-                "success_rate": round(float(avg_return), 1)
+                'total_samples': 0,
+                'most_profitable': None,
+                'average_duration': 0,
+                'success_rate': 0,
             })
-            
-        except Exception as e:
-            # Log error and return safe defaults
-            import traceback
-            print(f"KPI Error: {str(e)}")
-            print(traceback.format_exc())
-            return Response({
-                "total_samples": 0, 
-                "most_profitable": {"name": "N/A", "return": 0}, 
-                "average_duration": 0, 
-                "success_rate": 0
-            })
+        
+        # Calculate metrics safely
+        total_duration = queryset.aggregate(models.Sum('duration'))['duration__sum'] or 0
+        successful = queryset.filter(return_percentage__gt=0).count()
+        most_profitable = queryset.order_by('-return_percentage').first()
+        
+        return Response({
+            'total_samples': count,
+            'most_profitable': {
+                'name': most_profitable.company or most_profitable.symbol,
+                'return': round(most_profitable.return_percentage, 2)
+            } if most_profitable else None,
+            'average_duration': round(total_duration / count, 1),
+            'success_rate': round((successful / count) * 100, 1),
+        })
