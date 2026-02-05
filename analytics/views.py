@@ -1,17 +1,28 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.db.models import Avg, Max, Count, Q
+from django.db.models import Avg, Max, Count, Q, Sum, Min
 from .models import TradingData
 import pandas as pd
 from django.db import models
 import math
+from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 class DateRangeView(APIView):
     """Returns min and max dates for the specific selected file/cooldown from Database"""
+    
     def get(self, request):
         try:
             holding_weeks = int(request.query_params.get("weeks", 52))
             cooldown = int(request.query_params.get("cooldown_weeks", 52))
+            
+            # Use cache to avoid repeated DB queries
+            cache_key = f"date_range_{holding_weeks}_{cooldown}"
+            cached_result = cache.get(cache_key)
+            
+            if cached_result:
+                return Response(cached_result)
             
             queryset = TradingData.objects.filter(
                 holding_weeks=holding_weeks,
@@ -21,31 +32,58 @@ class DateRangeView(APIView):
             if not queryset.exists():
                 return Response({"min_date": None, "max_date": None})
             
+            # Optimize: Use only() to fetch only required fields
             stats = queryset.aggregate(
-                min_date=models.Min('breakout_date'), 
-                max_date=models.Max('breakout_date')
+                min_date=Min('breakout_date'), 
+                max_date=Max('breakout_date')
             )
 
-            return Response({
+            result = {
                 "min_date": stats['min_date'].strftime('%Y-%m-%d') if stats['min_date'] else None,
                 "max_date": stats['max_date'].strftime('%Y-%m-%d') if stats['max_date'] else None
-            })
+            }
+            
+            # Cache for 5 minutes
+            cache.set(cache_key, result, 300)
+            
+            return Response(result)
+            
         except Exception as e:
+            print(f"Error in DateRangeView: {str(e)}")
             return Response({"min_date": None, "max_date": None})
 
 class SectorListView(APIView):
     """Returns unique sectors from the database"""
+    
     def get(self, request):
-        sectors = TradingData.objects.values_list('sector', flat=True).distinct().order_by('sector')
-        return Response(list(sectors))
+        # Cache sector list for 10 minutes (rarely changes)
+        cache_key = "sectors_list"
+        cached_sectors = cache.get(cache_key)
+        
+        if cached_sectors:
+            return Response(cached_sectors)
+        
+        # Optimize: Use distinct() on database level
+        sectors = list(
+            TradingData.objects.values_list('sector', flat=True)
+            .distinct()
+            .order_by('sector')
+        )
+        
+        # Cache for 10 minutes
+        cache.set(cache_key, sectors, 600)
+        
+        return Response(sectors)
 
 class DashboardDataView(APIView):
     """Returns the filtered graph data using Database queries"""
+    
     def get(self, request):
         try:
             holding_weeks = int(request.query_params.get("weeks", 52))
             cooldown = int(request.query_params.get("cooldown_weeks", 52))
             
+            # Base queryset with index optimization
             queryset = TradingData.objects.filter(
                 holding_weeks=holding_weeks,
                 cooldown_setting=cooldown
@@ -54,24 +92,33 @@ class DashboardDataView(APIView):
             # Apply UI Filters
             start = request.query_params.get("start_date")
             end = request.query_params.get("end_date")
-            if start: queryset = queryset.filter(breakout_date__gte=start)
-            if end: queryset = queryset.filter(breakout_date__lte=end)
+            if start: 
+                queryset = queryset.filter(breakout_date__gte=start)
+            if end: 
+                queryset = queryset.filter(breakout_date__lte=end)
             
             sector = request.query_params.get("sector")
-            if sector and sector != "All": queryset = queryset.filter(sector=sector)
+            if sector and sector != "All": 
+                queryset = queryset.filter(sector=sector)
 
             mcap = request.query_params.get("mcap")
-            if mcap and mcap != "All": queryset = queryset.filter(mcap_category=mcap)
+            if mcap and mcap != "All": 
+                queryset = queryset.filter(mcap_category=mcap)
 
-            # Filter for Success (>= 20%)
-            success_data = queryset.filter(return_percentage__gte=20).values(
+            # Filter for Success (>= 20%) - use only() to fetch only needed fields
+            success_data = queryset.filter(
+                return_percentage__gte=20
+            ).only('duration', 'return_percentage').values(
                 'duration', 'return_percentage'
             )
 
             if not success_data.exists():
                 return Response([])
 
-            df = pd.DataFrame(list(success_data))
+            # Convert to list immediately to close DB connection
+            success_list = list(success_data)
+            
+            df = pd.DataFrame(success_list)
             df["duration_rounded"] = df["duration"].round().astype(int)
             
             bins = [20, 40, 60, 80, 100, float("inf")]
@@ -82,74 +129,91 @@ class DashboardDataView(APIView):
             
             response_data = []
             for dur, row in chart_data.iterrows():
-                entry = {"duration": dur}
+                entry = {"duration": int(dur)}
                 for lbl in labels:
                     entry[lbl] = int(row.get(lbl, 0))
                 response_data.append(entry)
 
             return Response(sorted(response_data, key=lambda x: x["duration"]))
+            
         except Exception as e:
+            print(f"Error in DashboardDataView: {str(e)}")
             return Response({"error": str(e)}, status=500)
 
 class KPIDataView(APIView):
+    """Returns KPI metrics based on filtered data within the selected date range"""
+    
     def get(self, request):
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-        sector = request.GET.get('sector', 'All')
-        mcap = request.GET.get('mcap', 'All')
-        cooldown_weeks = request.GET.get('cooldown_weeks')
-        weeks = request.GET.get('weeks')
-        
-        # Start with all data
-        queryset = TradingData.objects.all()
-        
-        # Apply required filters
-        if cooldown_weeks:
-            queryset = queryset.filter(cooldown_setting=int(cooldown_weeks))
-        
-        if weeks:
-            queryset = queryset.filter(holding_weeks=int(weeks))
-        
-        # Apply optional filters only if they don't make queryset empty
-        if sector and sector != 'All':
-            filtered = queryset.filter(sector=sector)
-            if filtered.exists():
-                queryset = filtered
-        
-        if mcap and mcap != 'All':
-            filtered = queryset.filter(mcap_category=mcap)
-            if filtered.exists():
-                queryset = filtered
-        
-        # Try to apply date filter, but keep all data if it results in empty
-        if start_date and end_date:
-            filtered = queryset.filter(breakout_date__range=[start_date, end_date])
-            if filtered.exists():
-                queryset = filtered
-        
-        # Now calculate with whatever data we have
-        count = queryset.count()
-        
-        if count == 0:
-            # Absolutely no data in database
+        try:
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            sector = request.GET.get('sector', 'All')
+            mcap = request.GET.get('mcap', 'All')
+            cooldown_weeks = request.GET.get('cooldown_weeks')
+            weeks = request.GET.get('weeks')
+            
+            # Start with all data
+            queryset = TradingData.objects.all()
+            
+            # Apply required filters
+            if cooldown_weeks:
+                queryset = queryset.filter(cooldown_setting=int(cooldown_weeks))
+            
+            if weeks:
+                queryset = queryset.filter(holding_weeks=int(weeks))
+            
+            # Apply date range filter
+            if start_date and end_date:
+                queryset = queryset.filter(breakout_date__range=[start_date, end_date])
+            
+            # Apply sector filter
+            if sector and sector != 'All':
+                queryset = queryset.filter(sector=sector)
+            
+            # Apply market cap filter
+            if mcap and mcap != 'All':
+                queryset = queryset.filter(mcap_category=mcap)
+            
+            # Single aggregate query for efficiency
+            aggregated = queryset.aggregate(
+                count=Count('id'),
+                total_duration=Sum('duration'),
+                successful=Count('id', filter=Q(return_percentage__gt=0))
+            )
+            
+            count = aggregated['count'] or 0
+            
+            if count == 0:
+                return Response({
+                    'total_samples': 0,
+                    'most_profitable': None,
+                    'average_duration': 0,
+                    'success_rate': 0,
+                })
+            
+            # Separate query for most profitable (only fetch needed fields)
+            most_profitable = queryset.only(
+                'company', 'symbol', 'return_percentage'
+            ).order_by('-return_percentage').first()
+            
+            total_duration = aggregated['total_duration'] or 0
+            successful = aggregated['successful'] or 0
+            
+            return Response({
+                'total_samples': count,
+                'most_profitable': {
+                    'name': most_profitable.company or most_profitable.symbol,
+                    'return': round(most_profitable.return_percentage, 2)
+                } if most_profitable else None,
+                'average_duration': round(total_duration / count, 1) if count > 0 else 0,
+                'success_rate': round((successful / count) * 100, 1) if count > 0 else 0,
+            })
+            
+        except Exception as e:
+            print(f"Error in KPIDataView: {str(e)}")
             return Response({
                 'total_samples': 0,
                 'most_profitable': None,
                 'average_duration': 0,
                 'success_rate': 0,
-            })
-        
-        # Calculate metrics safely
-        total_duration = queryset.aggregate(models.Sum('duration'))['duration__sum'] or 0
-        successful = queryset.filter(return_percentage__gt=0).count()
-        most_profitable = queryset.order_by('-return_percentage').first()
-        
-        return Response({
-            'total_samples': count,
-            'most_profitable': {
-                'name': most_profitable.company or most_profitable.symbol,
-                'return': round(most_profitable.return_percentage, 2)
-            } if most_profitable else None,
-            'average_duration': round(total_duration / count, 1),
-            'success_rate': round((successful / count) * 100, 1),
-        })
+            }, status=500)

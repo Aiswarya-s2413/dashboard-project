@@ -49,7 +49,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # Add this
+    'corsheaders.middleware.CorsMiddleware',  # MUST be first
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -128,25 +128,51 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    'https://dashboard-project-navy-three.vercel.app',
-]
-
-
 STATIC_URL = '/static/'
-
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",  # If using Vite
+    "https://dashboard-project-navy-three.vercel.app",
+]
+
+# Important: Add this to allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
+
+# Optional: Specify allowed methods (default is fine, but being explicit helps)
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Optional: Specify allowed headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Cache Configuration
+# Using file-based cache - make sure the directory has write permissions
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': '/var/tmp/django_cache',
+        'LOCATION': os.path.join(BASE_DIR, 'django_cache'),  # Use project directory instead
         'TIMEOUT': 300,  # Cache timeout in seconds (5 minutes)
         'OPTIONS': {
             'MAX_ENTRIES': 1000
@@ -154,3 +180,5 @@ CACHES = {
     }
 }
 
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
