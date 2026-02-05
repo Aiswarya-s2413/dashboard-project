@@ -114,14 +114,18 @@ const StaggeredChart = () => {
         }
 
         if (kpiResult.status === 'fulfilled') {
-          const kpiResponse = kpiResult.value.data;
-          setKpiData({
-            total_samples: kpiResponse.total_samples || 0,
-            most_profitable: kpiResponse.most_profitable || { name: 'N/A', return: 0 },
-            average_duration: kpiResponse.average_duration || 0,
-            success_rate: kpiResponse.success_rate || 0
-          });
-        }
+            const res = kpiResult.value.data;
+            setKpiData({
+              total_samples: res.total_samples || 0,
+              // Ensure you access the nested 'name' and 'return' keys
+              most_profitable: {
+                  name: res.most_profitable?.name || 'N/A',
+                  return: res.most_profitable?.return || 0
+              },
+              average_duration: res.average_duration || 0,
+              success_rate: res.success_rate || 0
+            });
+}
         setLoading(false);
       })
       .catch(err => {
