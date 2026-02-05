@@ -5,11 +5,20 @@ from .models import TradingData
 import pandas as pd
 from django.db import models
 
+
+class SectorListView(APIView):
+    """Returns unique sectors from the database"""
+    def get(self, request):
+        # We get distinct sectors available in the whole dataset
+        sectors = TradingData.objects.values_list('sector', flat=True).distinct().order_by('sector')
+        return Response(list(sectors))
+
 class DateRangeView(APIView):
     """Returns min and max dates for the specific selected file/cooldown from Database"""
     def get(self, request):
-        holding_weeks = request.query_params.get("weeks", 52)
-        cooldown = request.query_params.get("cooldown_weeks", 52)
+        # Convert to int
+        holding_weeks = int(request.query_params.get("weeks", 52))
+        cooldown = int(request.query_params.get("cooldown_weeks", 52))
         
         queryset = TradingData.objects.filter(
             holding_weeks=holding_weeks,
@@ -18,12 +27,7 @@ class DateRangeView(APIView):
         
         if not queryset.exists():
             return Response({"min_date": None, "max_date": None})
-            
-        dates = queryset.aggregate(min_d=Max('breakout_date'), max_d=Max('breakout_date'))
-        # Using aggregate to find min/max directly in SQL
-        res = queryset.aggregate(min_date=Max('breakout_date'), max_date=Max('breakout_date'))
         
-        # Note: Correcting aggregate to get both min and max
         stats = queryset.aggregate(
             min_date=models.Min('breakout_date'), 
             max_date=models.Max('breakout_date')
@@ -34,19 +38,13 @@ class DateRangeView(APIView):
             "max_date": stats['max_date'].strftime('%Y-%m-%d') if stats['max_date'] else None
         })
 
-class SectorListView(APIView):
-    """Returns unique sectors from the database"""
-    def get(self, request):
-        # We get distinct sectors available in the whole dataset
-        sectors = TradingData.objects.values_list('sector', flat=True).distinct().order_by('sector')
-        return Response(list(sectors))
-
 class DashboardDataView(APIView):
     """Returns the filtered graph data using Database queries"""
     def get(self, request):
         try:
-            holding_weeks = request.query_params.get("weeks", 52)
-            cooldown = request.query_params.get("cooldown_weeks", 52)
+            # Convert to int
+            holding_weeks = int(request.query_params.get("weeks", 52))
+            cooldown = int(request.query_params.get("cooldown_weeks", 52))
             
             # Base filtering
             queryset = TradingData.objects.filter(
@@ -99,8 +97,9 @@ class KPIDataView(APIView):
     """Returns KPI metrics from the Database"""
     def get(self, request):
         try:
-            holding_weeks = request.query_params.get("weeks", 52)
-            cooldown = request.query_params.get("cooldown_weeks", 52)
+            # Convert to int
+            holding_weeks = int(request.query_params.get("weeks", 52))
+            cooldown = int(request.query_params.get("cooldown_weeks", 52))
             
             queryset = TradingData.objects.filter(
                 holding_weeks=holding_weeks,
@@ -119,7 +118,7 @@ class KPIDataView(APIView):
             mcap = request.query_params.get("mcap")
             if mcap and mcap != "All": queryset = queryset.filter(mcap_category=mcap)
 
-            # ADD THIS LINE - Filter for successful trades only (>= 20% return)
+            # Filter for successful trades only (>= 20% return)
             queryset = queryset.filter(return_percentage__gte=20)
 
             total = queryset.count()
@@ -150,53 +149,3 @@ class KPIDataView(APIView):
             })
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-        
-class DebugDataView(APIView):
-    """Debug endpoint to see what's in the database"""
-    def get(self, request):
-        holding_weeks = request.query_params.get("weeks", 52)
-        cooldown = request.query_params.get("cooldown_weeks", 52)
-        
-        # Check total records
-        total_records = TradingData.objects.count()
-        
-        # Check records matching weeks/cooldown
-        matching_config = TradingData.objects.filter(
-            holding_weeks=holding_weeks,
-            cooldown_setting=cooldown
-        ).count()
-        
-        # Check with date filters
-        start = request.query_params.get("start_date")
-        end = request.query_params.get("end_date")
-        
-        queryset = TradingData.objects.filter(
-            holding_weeks=holding_weeks,
-            cooldown_setting=cooldown
-        )
-        
-        if start: 
-            queryset = queryset.filter(breakout_date__gte=start)
-        if end: 
-            queryset = queryset.filter(breakout_date__lte=end)
-        
-        with_dates = queryset.count()
-        successful = queryset.filter(return_percentage__gte=20).count()
-        
-        # Get sample data
-        sample = list(queryset.values(
-            'symbol', 'holding_weeks', 'cooldown_setting', 
-            'breakout_date', 'return_percentage'
-        )[:5])
-        
-        return Response({
-            "total_in_db": total_records,
-            "matching_weeks_cooldown": matching_config,
-            "after_date_filter": with_dates,
-            "successful_trades": successful,
-            "requested_weeks": holding_weeks,
-            "requested_cooldown": cooldown,
-            "start_date": start,
-            "end_date": end,
-            "sample_records": sample
-        })
