@@ -191,26 +191,31 @@ class KPIDataView(APIView):
                     'success_rate': 0,
                 })
             
-            # Separate query for most profitable (only fetch needed fields)
-            # Exclude NaNs explicitly using filter (NaN is greater than Inf in Postgres)
+            # Separate query for most profitable (exclude NaN/NULL values)
+            # Filter for valid return_percentage values first
             most_profitable = queryset.filter(
-                return_percentage__isnull=False,
-                return_percentage__lt=float('inf')
+                return_percentage__isnull=False
+            ).exclude(
+                return_percentage=float('nan')
             ).only(
                 'company', 'symbol', 'return_percentage'
             ).order_by('-return_percentage').first()
             
             total_duration = aggregated['total_duration'] or 0
-            if math.isnan(total_duration):
-                total_duration = 0
-            
             successful = aggregated['successful'] or 0
+            
+            # Calculate most_profitable_return
+            most_profitable_return = 0
+            if most_profitable and most_profitable.return_percentage is not None:
+                # Additional safety check for NaN
+                if not math.isnan(most_profitable.return_percentage):
+                    most_profitable_return = round(most_profitable.return_percentage, 2)
             
             return Response({
                 'total_samples': count,
                 'most_profitable': {
                     'name': most_profitable.company or most_profitable.symbol,
-                    'return': round(most_profitable.return_percentage, 2)
+                    'return': most_profitable_return
                 } if most_profitable else None,
                 'average_duration': round(total_duration / count, 1) if count > 0 else 0,
                 'success_rate': round((successful / count) * 100, 1) if count > 0 else 0,
@@ -224,3 +229,69 @@ class KPIDataView(APIView):
                 'average_duration': 0,
                 'success_rate': 0,
             }, status=500)
+
+class SectorPerformanceView(APIView):
+    """Returns success rate by Sector and Market Cap (Fixed 52w/52c, No Micro)"""
+    
+    def get(self, request):
+        try:
+            # Fixed Parameters
+            holding_weeks = 52
+            cooldown = 52
+            
+            # Cache key
+            cache_key = f"sector_performance_{holding_weeks}_{cooldown}"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data)
+
+            # Base Query: Fixed params, Exclude Micro
+            queryset = TradingData.objects.filter(
+                holding_weeks=holding_weeks,
+                cooldown_setting=cooldown
+            ).exclude(mcap_category='Micro')
+
+            # Get necessary fields
+            data = list(queryset.values('sector', 'mcap_category', 'return_percentage'))
+            
+            if not data:
+                return Response([])
+
+            df = pd.DataFrame(data)
+            
+            # Calculate Success (return > 0) per Sector & Mcap
+            # Group by Sector and Mcap
+            grouped = df.groupby(['sector', 'mcap_category'])
+            
+            # Calculate metrics
+            sector_mcap_stats = grouped.agg(
+                total_count=('return_percentage', 'count'),
+                success_count=('return_percentage', lambda x: (x > 0).sum())
+            ).reset_index()
+            
+            # Calculate percentage
+            sector_mcap_stats['success_rate'] = (sector_mcap_stats['success_count'] / sector_mcap_stats['total_count'] * 100).round(1)
+            
+            # Pivot primarily on Sector, with columns for each Mcap
+            pivot_df = sector_mcap_stats.pivot(index='sector', columns='mcap_category', values='success_rate').fillna(0)
+            
+            # Format for Recharts
+            response_data = []
+            for sector, row in pivot_df.iterrows():
+                entry = {"sector": sector}
+                # Add each cap value
+                for mcap in row.index:
+                    entry[mcap] = row[mcap]
+                response_data.append(entry)
+            
+            # Sort by sector name or maybe average success rate? Let's sort alpha by sector for now
+            response_data.sort(key=lambda x: x['sector'])
+            
+            # Cache for 10 minutes
+            cache.set(cache_key, response_data, 600)
+            
+            return Response(response_data)
+            
+        except Exception as e:
+            print(f"Error in SectorPerformanceView: {str(e)}")
+            return Response({"error": str(e)}, status=500)

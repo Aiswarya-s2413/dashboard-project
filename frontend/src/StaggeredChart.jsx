@@ -12,7 +12,7 @@ import {
   Label
 } from 'recharts';
 
-const StaggeredChart = () => {
+const StaggeredChart = ({ onNavigate }) => {
   // --- STATE MANAGEMENT ---
   const [data, setData] = useState([]);
   const [sectors, setSectors] = useState([]);
@@ -242,7 +242,10 @@ const StaggeredChart = () => {
           </select>
         </div>
 
-        <div style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
+        <div style={{ flex: '0 0 auto', marginLeft: 'auto', display: 'flex', gap: '12px' }}>
+          <button onClick={onNavigate} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid rgba(148, 163, 184, 0.3)', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', fontSize: '13px', fontWeight: '600', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Sector Analysis &rarr;
+          </button>
           <button onClick={handleReset} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid rgba(148, 163, 184, 0.3)', backgroundColor: 'rgba(15, 23, 42, 0.6)', color: '#9ca3af', fontSize: '13px', fontWeight: '600', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Reset
           </button>
