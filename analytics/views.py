@@ -8,6 +8,10 @@ import math
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+import numpy as np
+# scipy not available, using manual calculation
+
+
 
 class DateRangeView(APIView):
     """Returns min and max dates for the specific selected file/cooldown from Database"""
@@ -230,6 +234,63 @@ class KPIDataView(APIView):
                 'success_rate': 0,
             }, status=500)
 
+def calculate_cramers_v(df):
+    """
+    Calculates Cramer's V statistic for categorical association.
+    V = sqrt(chi2 / (n * (min(cols, rows) - 1)))
+    """
+    if df.empty or len(df.sector.unique()) < 2:
+        return 0.0
+    
+    # Create contingency table
+    contingency = pd.crosstab(df['sector'], df['mcap_category'])
+    
+    # Observed values
+    obs = contingency.values
+    n = obs.sum()
+    if n == 0:
+        return 0.0
+        
+    # Expected values
+    row_sums = obs.sum(axis=1)
+    col_sums = obs.sum(axis=0)
+    expected = np.outer(row_sums, col_sums) / n
+    
+    # Avoid division by zero
+    expected = np.where(expected == 0, 1e-9, expected)
+    
+    # Chi-square statistic
+    chi2 = np.sum((obs - expected)**2 / expected)
+    
+    phi2 = chi2 / n
+    r, k = contingency.shape
+    
+    # Correction for bias (simplified version of Bergsma and Wicher)
+    phi2_corr = max(0, phi2 - ((k-1)*(r-1))/(n-1))
+    r_corr = r - ((r-1)**2)/(n-1)
+    k_corr = k - ((k-1)**2)/(n-1)
+    
+    denom = min((k_corr-1), (r_corr-1))
+    if denom <= 0:
+        return 0.0
+        
+    return np.sqrt(phi2_corr / denom)
+
+
+def calculate_sample_confidence(count, threshold=30):
+    """
+    Returns a confidence score (0-1) based on sample size.
+    Uses a logarithmic scale to reach 1.0 at threshold.
+    """
+    if count <= 0:
+        return 0.0
+    if count >= threshold:
+        return 1.0
+    
+    # Logarithmic progression: 1 sample = small confidence, threshold = 1.0
+    return round(math.log(count + 1) / math.log(threshold + 1), 2)
+
+
 class SectorPerformanceView(APIView):
     """Returns success rate by Sector and Market Cap (Fixed 52w/52c, No Micro)"""
     
@@ -252,46 +313,178 @@ class SectorPerformanceView(APIView):
             ).exclude(mcap_category='Micro')
 
             # Get necessary fields
-            data = list(queryset.values('sector', 'mcap_category', 'return_percentage'))
+            data_list = list(queryset.values('sector', 'mcap_category', 'return_percentage', 'duration'))
             
-            if not data:
-                return Response([])
+            if not data_list:
+                return Response({
+                    "data": [],
+                    "overall_confidence": 0,
+                    "relationship_strength": "Very Weak",
+                    "total_samples": 0
+                })
 
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(data_list)
             
-            # Calculate Success (return > 0) per Sector & Mcap
+            # Calculate Overall Confidence (Cramer's V)
+            cv = calculate_cramers_v(df)
+            overall_confidence = round(cv * 100, 1)
+            
+            # Relationship Strength Interpretation
+            if cv > 0.5: strength = "Very Strong"
+            elif cv > 0.3: strength = "Strong"
+            elif cv > 0.15: strength = "Moderate"
+            elif cv > 0.05: strength = "Weak"
+            else: strength = "Very Weak"
+
             # Group by Sector and Mcap
             grouped = df.groupby(['sector', 'mcap_category'])
             
             # Calculate metrics
-            sector_mcap_stats = grouped.agg(
+            stats = grouped.agg(
                 total_count=('return_percentage', 'count'),
-                success_count=('return_percentage', lambda x: (x > 0).sum())
+                success_count=('return_percentage', lambda x: (x > 0).sum()),
+                avg_duration=('duration', 'mean')
             ).reset_index()
             
-            # Calculate percentage
-            sector_mcap_stats['success_rate'] = (sector_mcap_stats['success_count'] / sector_mcap_stats['total_count'] * 100).round(1)
+            # Calculate percentage and confidence
+            stats['success_rate'] = (stats['success_count'] / stats['total_count'] * 100).round(1)
+            stats['confidence'] = stats['total_count'].apply(calculate_sample_confidence)
+            stats['avg_duration'] = stats['avg_duration'].round(1)
             
-            # Pivot primarily on Sector, with columns for each Mcap
-            pivot_df = sector_mcap_stats.pivot(index='sector', columns='mcap_category', values='success_rate').fillna(0)
+            # Pivot primarily on Sector
+            pivot_success = stats.pivot(index='sector', columns='mcap_category', values='success_rate').fillna(0)
+            pivot_counts = stats.pivot(index='sector', columns='mcap_category', values='total_count').fillna(0)
+            pivot_conf = stats.pivot(index='sector', columns='mcap_category', values='confidence').fillna(0)
+            pivot_dur = stats.pivot(index='sector', columns='mcap_category', values='avg_duration').fillna(0)
             
             # Format for Recharts
             response_data = []
-            for sector, row in pivot_df.iterrows():
-                entry = {"sector": sector}
-                # Add each cap value
+            for sector, row in pivot_success.iterrows():
+                entry = {
+                    "sector": sector,
+                    "sample_counts": {},
+                    "confidence_scores": {},
+                    "avg_durations": {}
+                }
+                # Add each cap value, count, and confidence
                 for mcap in row.index:
                     entry[mcap] = row[mcap]
+                    entry["sample_counts"][mcap] = int(pivot_counts.loc[sector, mcap])
+                    entry["confidence_scores"][mcap] = float(pivot_conf.loc[sector, mcap])
+                    entry["avg_durations"][mcap] = float(pivot_dur.loc[sector, mcap])
                 response_data.append(entry)
             
-            # Sort by sector name or maybe average success rate? Let's sort alpha by sector for now
+            # Sort alpha by sector
             response_data.sort(key=lambda x: x['sector'])
             
+            final_response = {
+                "data": response_data,
+                "overall_confidence": overall_confidence,
+                "relationship_strength": strength,
+                "total_samples": len(df)
+            }
+            
             # Cache for 10 minutes
-            cache.set(cache_key, response_data, 600)
+            cache.set(cache_key, final_response, 600)
             
-            return Response(response_data)
-            
+            return Response(final_response)
+
         except Exception as e:
             print(f"Error in SectorPerformanceView: {str(e)}")
+            return Response({"error": str(e)}, status=500)
+
+class ConfidenceTrendView(APIView):
+    """Returns overall confidence and success rate across different durations"""
+    def get(self, request):
+        try:
+            durations = [26, 52, 78, 104, 156, 208]
+            cooldown = 52 # Fixed default
+            
+            # Cache check
+            cache_key = f"confidence_trend_{cooldown}"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data)
+                
+            trend_data = []
+            
+            for d in durations:
+                queryset = TradingData.objects.filter(
+                    holding_weeks=d,
+                    cooldown_setting=cooldown
+                ).exclude(mcap_category='Micro')
+                
+                data_list = list(queryset.values('sector', 'mcap_category', 'return_percentage'))
+                if not data_list:
+                    continue
+                    
+                df = pd.DataFrame(data_list)
+                cv = calculate_cramers_v(df)
+                
+                # Calculate average success rate
+                avg_success = (df['return_percentage'] > 0).mean() * 100
+                
+                trend_data.append({
+                    "duration": d,
+                    "confidence": round(cv * 100, 1),
+                    "success_rate": round(avg_success, 1),
+                    "sample_size": len(df)
+                })
+                
+            cache.set(cache_key, trend_data, 600)
+            return Response(trend_data)
+            
+        except Exception as e:
+            print(f"Error in ConfidenceTrendView: {str(e)}")
+            return Response({"error": str(e)}, status=500)
+
+
+class SectorDurationView(APIView):
+    """Returns sector performance broken down by duration for bubble chart"""
+    def get(self, request):
+        try:
+            durations = [26, 52, 78, 104, 156, 208]
+            cooldown = 52  # Fixed default
+            
+            # Cache check
+            cache_key = f"sector_duration_bubbles_{cooldown}"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data)
+            
+            # Fetch all relevant data at once to minimize queries
+            queryset = TradingData.objects.filter(
+                holding_weeks__in=durations,
+                cooldown_setting=cooldown
+            ).exclude(mcap_category='Micro')
+            
+            data_list = list(queryset.values('sector', 'holding_weeks', 'return_percentage'))
+            
+            if not data_list:
+                return Response([])
+                
+            df = pd.DataFrame(data_list)
+            
+            # Group by Sector and Duration
+            grouped = df.groupby(['sector', 'holding_weeks'])
+            
+            bubble_data = []
+            
+            for (sector, duration), group in grouped:
+                success_rate = (group['return_percentage'] > 0).mean() * 100
+                sample_size = len(group)
+                
+                bubble_data.append({
+                    "sector": sector,
+                    "duration": duration,
+                    "success_rate": round(success_rate, 1),
+                    "sample_size": sample_size
+                })
+            
+            # Cache for 10 minutes
+            cache.set(cache_key, bubble_data, 600)
+            return Response(bubble_data)
+            
+        except Exception as e:
+            print(f"Error in SectorDurationView: {str(e)}")
             return Response({"error": str(e)}, status=500)
