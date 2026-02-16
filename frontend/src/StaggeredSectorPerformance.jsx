@@ -415,10 +415,19 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     // Color scale helper
     const getCellColor = (rate) => {
       if (!rate && rate !== 0) return 'rgba(30, 41, 59, 0.5)'; // Empty
-      if (rate >= 70) return 'rgba(16, 185, 129, 0.8)'; // High success
-      if (rate >= 50) return 'rgba(52, 211, 153, 0.6)';
-      if (rate >= 30) return 'rgba(251, 191, 36, 0.6)'; // Medium
-      return 'rgba(239, 68, 68, 0.6)'; // Low
+      
+      // Green Shades (Success)
+      if (rate >= 90) return 'rgba(21, 128, 61, 0.9)';   // Deep Green
+      if (rate >= 75) return 'rgba(22, 163, 74, 0.85)';  // Green
+      if (rate >= 60) return 'rgba(101, 163, 13, 0.8)';  // Lime/Yellow-Green
+      
+      // Amber Shades (Mixed)
+      if (rate >= 45) return 'rgba(202, 138, 4, 0.8)';   // Dark Yellow/Amber
+      
+      // Red Shades (Failure - Darker red = lower score)
+      if (rate >= 30) return 'rgba(234, 88, 12, 0.8)';   // Orange-Red
+      if (rate >= 15) return 'rgba(220, 38, 38, 0.85)';  // Red
+      return 'rgba(153, 27, 27, 0.9)';                   // Deep Red (Lowest)
     };
 
     return (
@@ -426,7 +435,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
         <div style={{ marginBottom: '20px' }}>
           <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '16px' }}>Sector Performance vs Duration Heatmap</h3>
           <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>
-            Green: High Success Rate (&gt;70%). Red: Low Success Rate. Intensity indicates reliability.
+            Scale: Deep Red (0%) &rarr; Red &rarr; Amber &rarr; Lime &rarr; Deep Green (100%).
           </p>
         </div>
         
