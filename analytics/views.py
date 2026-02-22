@@ -299,9 +299,10 @@ class SectorPerformanceView(APIView):
             # Fixed Parameters
             holding_weeks = 52
             cooldown = 52
+            success_threshold = float(request.query_params.get("success_threshold", 20))
             
             # Cache key
-            cache_key = f"sector_performance_{holding_weeks}_{cooldown}"
+            cache_key = f"sector_performance_{holding_weeks}_{cooldown}_{success_threshold}"
             cached_data = cache.get(cache_key)
             if cached_data:
                 return Response(cached_data)
@@ -342,7 +343,7 @@ class SectorPerformanceView(APIView):
             # Calculate metrics
             stats = grouped.agg(
                 total_count=('return_percentage', 'count'),
-                success_count=('return_percentage', lambda x: (x > 0).sum()),
+                success_count=('return_percentage', lambda x: (x >= success_threshold).sum()),
                 avg_duration=('duration', 'mean')
             ).reset_index()
             
@@ -445,9 +446,10 @@ class SectorDurationView(APIView):
         try:
             durations = [26, 52, 78, 104, 156, 208]
             cooldown = 52  # Fixed default
+            success_threshold = float(request.query_params.get("success_threshold", 20))
             
             # Cache check
-            cache_key = f"sector_duration_bubbles_{cooldown}"
+            cache_key = f"sector_duration_bubbles_{cooldown}_{success_threshold}"
             cached_data = cache.get(cache_key)
             if cached_data:
                 return Response(cached_data)
@@ -471,7 +473,7 @@ class SectorDurationView(APIView):
             bubble_data = []
             
             for (sector, duration), group in grouped:
-                success_rate = (group['return_percentage'] > 0).mean() * 100
+                success_rate = (group['return_percentage'] >= success_threshold).mean() * 100
                 sample_size = len(group)
                 
                 bubble_data.append({

@@ -23,6 +23,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [sortBy, setSortBy] = useState('average'); // 'average', 'sector'
   const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'trust_score'
   const [heatmapData, setHeatmapData] = useState([]);
+  const [successThreshold, setSuccessThreshold] = useState(20);
   const [kpis, setKpis] = useState({
 
     bestSector: { name: '-', rate: 0 },
@@ -46,7 +47,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
 
   useEffect(() => {
     setLoading(true);
-    axios.get('https://dashboard.aiswaryasathyan.space/api/sector-performance/')
+    axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-performance/?success_threshold=${successThreshold}`)
       .then(response => {
         const apiData = response.data.data || [];
         const overallMetrics = {
@@ -127,13 +128,13 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
       });
 
     // Fetch Heatmap Data
-    axios.get('https://dashboard.aiswaryasathyan.space/api/sector-duration/')
+    axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-duration/?success_threshold=${successThreshold}`)
       .then(response => {
         setHeatmapData(response.data || []);
       })
       .catch(err => console.error("Error fetching heatmap data:", err));
 
-  }, []);
+  }, [successThreshold]);
 
   const handleSort = (type) => {
     setSortBy(type);
@@ -511,6 +512,38 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
            <h2 style={{ margin: 0, color: '#e5e7eb', fontSize: '18px', fontWeight: '600' }}>Sector Performance Analysis</h2>
            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
              Fixed Parameters: 52 Weeks holding, 52 Weeks cooldown (Excluding Micro Cap)
+           </div>
+           
+           <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+             <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500' }}>Success Rate Threshold:</label>
+             <select 
+               value={successThreshold} 
+               onChange={(e) => setSuccessThreshold(Number(e.target.value))}
+               style={{ 
+                 backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+                 color: '#e5e7eb', 
+                 border: '1px solid rgba(148, 163, 184, 0.3)', 
+                 borderRadius: '6px', 
+                 padding: '4px 8px', 
+                 fontSize: '12px',
+                 outline: 'none',
+                 cursor: 'pointer'
+               }}
+             >
+               <option value={0}>&gt; 0%</option>
+               <option value={10}>&gt;= 10%</option>
+               <option value={15}>&gt;= 15%</option>
+               <option value={20}>&gt;= 20%</option>
+               <option value={25}>&gt;= 25%</option>
+               <option value={30}>&gt;= 30%</option>
+               <option value={40}>&gt;= 40%</option>
+               <option value={50}>&gt;= 50%</option>
+               <option value={60}>&gt;= 60%</option>
+               <option value={70}>&gt;= 70%</option>
+               <option value={80}>&gt;= 80%</option>
+               <option value={90}>&gt;= 90%</option>
+               <option value={100}>&gt;= 100%</option>
+             </select>
            </div>
         </div>
         
