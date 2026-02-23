@@ -877,22 +877,22 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
               </div>
             </div>
 
-            {/* Worst Sector */}
+            {/* Total Samples */}
             <div style={{ 
               backgroundColor: 'rgba(15, 23, 42, 0.6)', 
               borderRadius: '12px', 
               padding: '16px', 
-              border: '1px solid rgba(239, 68, 68, 0.3)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
               backdropFilter: 'blur(12px)'
             }}>
               <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: '600' }}>
-                Worst Sector
+                Total Samples
               </div>
-              <div style={{ fontSize: '18px', color: '#ef4444', fontWeight: '700', marginBottom: '4px' }}>
-                {kpis.worstSector.rate}%
+              <div style={{ fontSize: '18px', color: '#3b82f6', fontWeight: '700', marginBottom: '4px' }}>
+                {kpis.overallConfidence?.total?.toLocaleString() || 0}
               </div>
               <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
-                {kpis.worstSector.name}
+                Samples Analyzed
               </div>
             </div>
 
