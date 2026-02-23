@@ -490,3 +490,38 @@ class SectorDurationView(APIView):
         except Exception as e:
             print(f"Error in SectorDurationView: {str(e)}")
             return Response({"error": str(e)}, status=500)
+            
+class SectorTradesView(APIView):
+    """Returns the list of trades for a specific sector and duration for clicking on the heatmap"""
+    def get(self, request):
+        try:
+            sector = request.query_params.get("sector")
+            duration = request.query_params.get("duration")
+            cooldown = 52 # Fixed default
+            success_threshold = float(request.query_params.get("success_threshold", 20))
+            
+            if not sector or not duration:
+                return Response({'error': 'Sector and duration are required'}, status=400)
+                
+            duration = int(duration)
+            
+            # Fetch relevant basic info directly
+            queryset = TradingData.objects.filter(
+                sector=sector,
+                holding_weeks=duration,
+                cooldown_setting=cooldown
+            ).exclude(mcap_category='Micro')
+            
+            # Fetch specific trades data to display
+            data_list = list(queryset.values('symbol', 'company', 'breakout_date', 'return_percentage', 'duration', 'mcap_category').order_by('-return_percentage'))
+            
+            # Label whether they met the success criteria or not based on threshold and enrich
+            for item in data_list:
+                item['successful'] = item['return_percentage'] >= success_threshold
+                if math.isnan(item['return_percentage']):
+                    item['return_percentage'] = 0.0
+
+            return Response(data_list)
+        except Exception as e:
+            print(f"Error in SectorTradesView: {str(e)}")
+            return Response({"error": str(e)}, status=500)

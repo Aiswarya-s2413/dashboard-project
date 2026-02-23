@@ -13,7 +13,9 @@ import {
   LabelList,
   ScatterChart,
   Scatter,
-  ZAxis
+  ZAxis,
+  LineChart,
+  Line
 } from 'recharts';
 
 const StaggeredSectorPerformance = ({ onNavigate }) => {
@@ -21,7 +23,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('average'); // 'average', 'sector'
-  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'trust_score'
+  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'mcap_graph', 'trust_score'
   const [heatmapData, setHeatmapData] = useState([]);
   const [successThreshold, setSuccessThreshold] = useState(20);
   const [kpis, setKpis] = useState({
@@ -35,6 +37,9 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     leastReliable: { name: '-', details: '-' }
   });
 
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [cellTrades, setCellTrades] = useState([]);
+  const [loadingTrades, setLoadingTrades] = useState(false);
 
   const chartContainerRef = useRef(null);
 
@@ -43,6 +48,18 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     'Large': '#10b981', // Green
     'Mid': '#f59e0b',   // Amber
     'Small': '#ef4444'  // Red
+  };
+
+  const handleCellClick = (sector, duration, rate, count) => {
+    if (count === 0 || rate === null) return;
+    setSelectedCell({ sector, duration, rate, count });
+    setLoadingTrades(true);
+    axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-trades/?sector=${encodeURIComponent(sector)}&duration=${duration}&success_threshold=${successThreshold}`)
+      .then(res => {
+        setCellTrades(res.data || []);
+      })
+      .catch(err => console.error("Error fetching trades:", err))
+      .finally(() => setLoadingTrades(false));
   };
 
   useEffect(() => {
@@ -473,12 +490,13 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                          justifyContent: 'center',
                          alignItems: 'center',
                          minHeight: '60px',
-                         cursor: 'default',
+                         cursor: dataPoint ? 'pointer' : 'default',
                          transition: 'transform 0.2s',
                          border: '1px solid rgba(255,255,255,0.05)'
                        }}
-                       onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                       onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                       onClick={() => handleCellClick(sector, duration, rate, dataPoint?.sample_size || 0)}
+                       onMouseEnter={(e) => { if (dataPoint) e.currentTarget.style.transform = 'scale(1.05)' }}
+                       onMouseLeave={(e) => { if (dataPoint) e.currentTarget.style.transform = 'scale(1)' }}
                      >
                        {dataPoint ? (
                          <>
@@ -498,6 +516,138 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                </React.Fragment>
              ))}
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMcapGraph = () => {
+    const scatterData = [];
+    const mcaps = ['Mega', 'Large', 'Mid', 'Small'];
+    const mcapIndex = { 'Mega': 1, 'Large': 2, 'Mid': 3, 'Small': 4 };
+    
+    let seed = 1;
+    const stableRandom = () => {
+      const x = Math.sin(seed++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    data.forEach((item, i) => {
+      mcaps.forEach(mcap => {
+        const count = item.sample_counts?.[mcap] || 0;
+        if (count > 0) {
+          const rate = item[mcap];
+          const conf = (item.confidence_scores?.[mcap] || 0) * 100;
+          
+          let color = '#f59e0b'; // amber
+          if (conf >= 80) color = '#10b981'; // green
+          else if (conf < 40) color = '#ef4444'; // red
+
+          // Add jitter to avoid perfect overlaps 
+          const jitter = (stableRandom() - 0.5) * 0.5;
+
+          scatterData.push({
+            sector: item.sector,
+            mcapName: mcap + ' Cap',
+            x: mcapIndex[mcap] + jitter,
+            rate: rate,
+            samples: count,
+            fill: color,
+            conf: conf
+          });
+        }
+      });
+    });
+
+    const CustomScatterTooltip = ({ active, payload }) => {
+      if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+          <div style={{ backgroundColor: 'rgba(2, 6, 23, 0.95)', border: '1px solid rgba(148, 163, 184, 0.5)', borderRadius: '8px', padding: '12px', minWidth: '180px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ color: '#e5e7eb', fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid rgba(148,163,184,0.2)', paddingBottom: '4px' }}>
+              {data.sector} <span style={{ color: '#9ca3af', fontWeight: 'normal' }}>({data.mcapName})</span>
+            </div>
+            <div style={{ color: '#6ee7b7', fontSize: '12px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+              <span>Success Rate:</span> <strong>{data.rate.toFixed(1)}%</strong>
+            </div>
+            <div style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+              <span>Trades:</span> <strong>{data.samples}</strong>
+            </div>
+            <div style={{ color: data.fill, fontSize: '12px', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+              <span>Trust Score:</span> <strong>{data.conf.toFixed(0)}%</strong>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
+
+    return (
+      <div style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.3)', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '16px' }}>Sector Distribution by Market Cap (52 Weeks)</h3>
+          <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>
+            A clustered scatter plot showing the distribution of sector success rates within each Market Cap tier. Bubble size indicates sample count, and color indicates trust level.
+          </p>
+        </div>
+        
+        <div style={{ width: '100%', height: '500px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
+              
+              <XAxis 
+                 type="number" 
+                 dataKey="x" 
+                 domain={[0.5, 4.5]}
+                 ticks={[1, 2, 3, 4]}
+                 tickFormatter={(val) => {
+                   const labels = { 1: 'Mega Cap', 2: 'Large Cap', 3: 'Mid Cap', 4: 'Small Cap' };
+                   return labels[val] || '';
+                 }}
+                 tick={{ fill: '#e5e7eb', fontSize: 13, fontWeight: 600 }} 
+                 axisLine={{ stroke: 'rgba(148, 163, 184, 0.35)' }} 
+                 tickLine={false} 
+                 dy={10}
+              />
+              
+              <YAxis 
+                 type="number" 
+                 dataKey="rate" 
+                 domain={[0, 100]} 
+                 tick={{ fill: '#9ca3af', fontSize: 11 }}
+                 axisLine={{ stroke: 'rgba(148, 163, 184, 0.35)' }}
+                 tickLine={false}
+                 label={{ value: 'Success Rate (%)', angle: -90, position: 'insideLeft', offset: 5, style: { fill: '#6b7280', fontSize: 12 } }}
+              />
+              
+              <ZAxis 
+                 type="number" 
+                 dataKey="samples" 
+                 range={[30, 600]} 
+              />
+              
+              <Tooltip 
+                 content={<CustomScatterTooltip />} 
+                 cursor={{ strokeDasharray: '3 3', stroke: 'rgba(148,163,184,0.3)', strokeWidth: 1 }} 
+              />
+              
+              <Legend 
+                 wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} 
+                 payload={[
+                   { value: 'High Trust (≥80%)', type: 'circle', color: '#10b981' },
+                   { value: 'Conviction (40-79%)', type: 'circle', color: '#f59e0b' },
+                   { value: 'Low Trust (<40%)', type: 'circle', color: '#ef4444' }
+                 ]}
+              />
+              
+              <Scatter data={scatterData} opacity={0.85}>
+                {scatterData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                ))}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );
@@ -597,6 +747,21 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
               SECTOR BUBBLE
             </button>
             <button 
+              onClick={() => setViewMode('mcap_graph')}
+              style={{ 
+                padding: '6px 12px', 
+                borderRadius: '6px', 
+                border: 'none',
+                backgroundColor: viewMode === 'mcap_graph' ? 'rgba(139, 92, 246, 0.2)' : 'transparent', 
+                color: viewMode === 'mcap_graph' ? '#c4b5fd' : '#6b7280', 
+                fontSize: '11px', 
+                fontWeight: '600', 
+                cursor: 'pointer' 
+              }}
+            >
+              MCAP GRAPH
+            </button>
+            <button 
               onClick={() => setViewMode('heatmap')}
               style={{ 
                 padding: '6px 12px', 
@@ -609,7 +774,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                 cursor: 'pointer' 
               }}
             >
-              HEATMAP
+              DUR HEATMAP
             </button>
             <button 
               onClick={() => setViewMode('trust_score')}
@@ -842,6 +1007,8 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
           renderSectorBubbleChart()
         ) : viewMode === 'heatmap' ? (
           renderHeatmap()
+        ) : viewMode === 'mcap_graph' ? (
+          renderMcapGraph()
         ) : viewMode === 'trust_score' ? (
           renderTrustChart()
         ) : viewMode === 'table' ? (
@@ -969,6 +1136,86 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
         )}
 
       </div>
+      
+      {/* TRADE LIST MODAL */}
+      {selectedCell && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(2, 6, 23, 0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '24px' }}>
+          <div style={{ backgroundColor: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.2)', borderRadius: '12px', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '18px' }}>Trade History</h3>
+                <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '13px' }}>
+                  {selectedCell.sector} <span style={{ color: '#6366f1' }}>•</span> {selectedCell.duration} Weeks Holding
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase' }}>Win Rate</div>
+                    <div style={{ color: '#10b981', fontSize: '15px', fontWeight: 'bold' }}>{selectedCell.rate.toFixed(1)}%</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase' }}>Trades</div>
+                    <div style={{ color: '#e5e7eb', fontSize: '15px', fontWeight: 'bold' }}>{selectedCell.count}</div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedCell(null)}
+                  style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '24px', padding: '0 8px' }}
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+              {loadingTrades ? (
+                <div style={{ color: '#9ca3af', textAlign: 'center', padding: '40px 0' }}>Loading trades...</div>
+              ) : cellTrades.length === 0 ? (
+                <div style={{ color: '#9ca3af', textAlign: 'center', padding: '40px 0' }}>No trades found.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.2)', color: '#9ca3af' }}>
+                      <th style={{ padding: '10px 8px', fontWeight: '500' }}>Symbol</th>
+                      <th style={{ padding: '10px 8px', fontWeight: '500' }}>Breakout Date</th>
+                      <th style={{ padding: '10px 8px', fontWeight: '500' }}>Market Cap</th>
+                      <th style={{ padding: '10px 8px', fontWeight: '500', textAlign: 'right' }}>12M Return</th>
+                      <th style={{ padding: '10px 8px', fontWeight: '500', textAlign: 'center' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cellTrades.map((trade, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)', color: '#e5e7eb' }}>
+                        <td style={{ padding: '12px 8px' }}>
+                          <span style={{ fontWeight: '600' }}>{trade.symbol}</span>
+                        </td>
+                        <td style={{ padding: '12px 8px', color: '#9ca3af' }}>{trade.breakout_date}</td>
+                        <td style={{ padding: '12px 8px' }}>{trade.mcap_category} Cap</td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '500', color: trade.return_percentage >= 0 ? '#10b981' : '#ef4444' }}>
+                          {trade.return_percentage > 0 ? '+' : ''}{trade.return_percentage.toFixed(2)}%
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                          {trade.successful ? (
+                            <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>WIN</span>
+                          ) : (
+                            <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>LOSS</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
 
   );
