@@ -928,13 +928,10 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                 Total Samples
               </div>
               <div style={{ fontSize: '18px', color: '#3b82f6', fontWeight: '700', marginBottom: '4px' }}>
-                {kpis.overallConfidence?.total?.toLocaleString() || 0}
+                {kpis.validSamples?.toLocaleString() || 0} / {kpis.overallConfidence?.total?.toLocaleString() || 0}
               </div>
               <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
-                Samples Analyzed
-              </div>
-              <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '6px' }}>
-                {kpis.validSamples?.toLocaleString() || 0} matching filters
+                Matching / Total Samples
               </div>
             </div>
 
