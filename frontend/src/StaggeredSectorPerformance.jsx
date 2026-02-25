@@ -30,10 +30,8 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [kpis, setKpis] = useState({
 
     bestSector: { name: '-', rate: 0 },
-    worstSector: { name: '-', rate: 0 },
-    bestMcap: { name: '-', rate: 0 },
-    worstMcap: { name: '-', rate: 0 },
     overallConfidence: { score: 0, strength: '-', total: 0 },
+    mcapAverages: { 'Mega': 0, 'Large': 0, 'Mid': 0, 'Small': 0 },
     mostReliable: { name: '-', details: '-' },
     leastReliable: { name: '-', details: '-' }
   });
@@ -102,15 +100,9 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
             }
           });
           
-          // Find best and worst market cap
-          const mcapEntries = Object.entries(mcapAverages).sort((a, b) => b[1] - a[1]);
-          const bestMcap = mcapEntries[0];
-          const worstMcap = mcapEntries[mcapEntries.length - 1];
           setKpis({
             bestSector: { name: bestSector.sector, rate: bestSector.average.toFixed(1) },
-            worstSector: { name: worstSector.sector, rate: worstSector.average.toFixed(1) },
-            bestMcap: { name: bestMcap[0], rate: bestMcap[1].toFixed(1) },
-            worstMcap: { name: worstMcap[0], rate: worstMcap[1].toFixed(1) },
+            mcapAverages: mcapAverages,
             overallConfidence: overallMetrics,
             
             validSamples: (() => {
@@ -901,7 +893,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
       {/* KPI BOXES SECTION */}
       {!loading && !error && (
         <div style={{ padding: '20px 24px 0 24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px' }}>
             
             {/* Row 1 */}
 
@@ -946,44 +938,81 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
               </div>
             </div>
 
-            {/* Best Market Cap */}
+            {/* Mega Cap */}
             <div style={{ 
               backgroundColor: 'rgba(15, 23, 42, 0.6)', 
               borderRadius: '12px', 
               padding: '16px', 
-              border: '1px solid rgba(16, 185, 129, 0.3)',
+              border: '1px solid rgba(139, 92, 246, 0.3)', // Purple
               backdropFilter: 'blur(12px)'
             }}>
               <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: '600' }}>
-                Best Market Cap
+                Mega Cap
+              </div>
+              <div style={{ fontSize: '18px', color: '#8b5cf6', fontWeight: '700', marginBottom: '4px' }}>
+                {kpis.mcapAverages?.Mega?.toFixed(1) || 0}%
+              </div>
+              <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
+                Avg Success
+              </div>
+            </div>
+
+            {/* Large Cap */}
+            <div style={{ 
+              backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+              borderRadius: '12px', 
+              padding: '16px', 
+              border: '1px solid rgba(16, 185, 129, 0.3)', // Green
+              backdropFilter: 'blur(12px)'
+            }}>
+              <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: '600' }}>
+                Large Cap
               </div>
               <div style={{ fontSize: '18px', color: '#10b981', fontWeight: '700', marginBottom: '4px' }}>
-                {kpis.bestMcap.rate}%
+                {kpis.mcapAverages?.Large?.toFixed(1) || 0}%
               </div>
               <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
-                {kpis.bestMcap.name} Cap
+                Avg Success
               </div>
             </div>
 
-            {/* Worst Market Cap */}
+            {/* Mid Cap */}
             <div style={{ 
               backgroundColor: 'rgba(15, 23, 42, 0.6)', 
               borderRadius: '12px', 
               padding: '16px', 
-              border: '1px solid rgba(239, 68, 68, 0.3)',
+              border: '1px solid rgba(245, 158, 11, 0.3)', // Amber
               backdropFilter: 'blur(12px)'
             }}>
               <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: '600' }}>
-                Worst Market Cap
+                Mid Cap
               </div>
-              <div style={{ fontSize: '18px', color: '#ef4444', fontWeight: '700', marginBottom: '4px' }}>
-                {kpis.worstMcap.rate}%
+              <div style={{ fontSize: '18px', color: '#f59e0b', fontWeight: '700', marginBottom: '4px' }}>
+                {kpis.mcapAverages?.Mid?.toFixed(1) || 0}%
               </div>
               <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
-                {kpis.worstMcap.name} Cap
+                Avg Success
               </div>
             </div>
 
+            {/* Small Cap */}
+            <div style={{ 
+              backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+              borderRadius: '12px', 
+              padding: '16px', 
+              border: '1px solid rgba(239, 68, 68, 0.3)', // Red
+              backdropFilter: 'blur(12px)'
+            }}>
+              <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: '600' }}>
+                Small Cap
+              </div>
+              <div style={{ fontSize: '18px', color: '#ef4444', fontWeight: '700', marginBottom: '4px' }}>
+                {kpis.mcapAverages?.Small?.toFixed(1) || 0}%
+              </div>
+              <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
+                Avg Success
+              </div>
+            </div>
 
           </div>
 
@@ -1028,24 +1057,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
 
       <div style={{ flex: 1, minHeight: 0, padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         
-        {/* Confidence Legend */}
-        {!loading && !error && (
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', padding: '0 4px' }}>
-            <span style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Confidence Hint:</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: '#94a3b8', opacity: 1, borderRadius: '2px' }}></div>
-              <span style={{ fontSize: '11px', color: '#9ca3af' }}>High (30+ trades)</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: '#94a3b8', opacity: 0.5, borderRadius: '2px' }}></div>
-              <span style={{ fontSize: '11px', color: '#9ca3af' }}>Medium</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: '#94a3b8', opacity: 0.2, borderRadius: '2px' }}></div>
-              <span style={{ fontSize: '11px', color: '#9ca3af' }}>Low (1-2 trades)</span>
-            </div>
-          </div>
-        )}
+        
 
         {loading ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#9ca3af', fontSize: '14px' }}>
