@@ -455,9 +455,12 @@ class SectorDurationView(APIView):
                 return Response(cached_data)
             
             # Fetch all relevant data at once to minimize queries
+            from datetime import date
+            
             queryset = TradingData.objects.filter(
                 holding_weeks__in=durations,
-                cooldown_setting=cooldown
+                cooldown_setting=cooldown,
+                breakout_date__lt=date(2025, 1, 1)
             ).exclude(mcap_category='Micro')
             
             data_list = list(queryset.values('sector', 'holding_weeks', 'return_percentage'))

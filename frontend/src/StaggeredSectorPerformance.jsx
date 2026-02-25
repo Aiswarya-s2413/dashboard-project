@@ -26,6 +26,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'mcap_graph', 'trust_score'
   const [heatmapData, setHeatmapData] = useState([]);
   const [successThreshold, setSuccessThreshold] = useState(20);
+  const [minWinRate, setMinWinRate] = useState(0);
   const [kpis, setKpis] = useState({
 
     bestSector: { name: '-', rate: 0 },
@@ -111,6 +112,18 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
             bestMcap: { name: bestMcap[0], rate: bestMcap[1].toFixed(1) },
             worstMcap: { name: worstMcap[0], rate: worstMcap[1].toFixed(1) },
             overallConfidence: overallMetrics,
+            
+            validSamples: (() => {
+              let count = 0;
+              processedData.forEach(s => {
+                Object.entries(s.sample_counts || {}).forEach(([m, c]) => {
+                  if (s[m] !== undefined && s[m] > 0) { // Assuming if there's a non-zero success rate or sample data logged, it matches filters
+                    count += c;
+                  }
+                });
+              });
+              return count;
+            })(),
 
             mostReliable: (() => {
               let max = { count: -1, sector: '', mcap: '' };
@@ -475,12 +488,15 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                  </div>
                  {durations.map(duration => {
                    const dataPoint = lookup[`${sector}-${duration}`];
-                   const rate = dataPoint ? dataPoint.success_rate : null;
+                   const rawRate = dataPoint ? dataPoint.success_rate : null;
+                   
+                   const meetsThreshold = rawRate !== null && rawRate >= minWinRate;
+                   const rate = meetsThreshold ? rawRate : null;
                    
                    return (
                      <div 
                        key={`${sector}-${duration}`}
-                       title={dataPoint ? `Success: ${rate}%\nSamples: ${dataPoint.sample_size}` : 'No Data'}
+                       title={meetsThreshold ? `Success: ${rate}%\nSamples: ${dataPoint.sample_size}` : 'No Data or Below Min Win Rate'}
                        style={{ 
                          backgroundColor: getCellColor(rate),
                          borderRadius: '6px',
@@ -494,11 +510,11 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                          transition: 'transform 0.2s',
                          border: '1px solid rgba(255,255,255,0.05)'
                        }}
-                       onClick={() => handleCellClick(sector, duration, rate, dataPoint?.sample_size || 0)}
-                       onMouseEnter={(e) => { if (dataPoint) e.currentTarget.style.transform = 'scale(1.05)' }}
-                       onMouseLeave={(e) => { if (dataPoint) e.currentTarget.style.transform = 'scale(1)' }}
+                       onClick={() => handleCellClick(sector, duration, rate, (meetsThreshold && dataPoint) ? dataPoint.sample_size : 0)}
+                       onMouseEnter={(e) => { if (meetsThreshold) e.currentTarget.style.transform = 'scale(1.05)' }}
+                       onMouseLeave={(e) => { if (meetsThreshold) e.currentTarget.style.transform = 'scale(1)' }}
                      >
-                       {dataPoint ? (
+                       {meetsThreshold ? (
                          <>
                            <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '14px', textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
                              {rate.toFixed(0)}%
@@ -532,7 +548,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
       return x - Math.floor(x);
     };
 
-    data.forEach((item, i) => {
+    data.forEach((item) => {
       mcaps.forEach(mcap => {
         const count = item.sample_counts?.[mcap] || 0;
         if (count > 0) {
@@ -694,6 +710,37 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                <option value={90}>&gt;= 90%</option>
                <option value={100}>&gt;= 100%</option>
              </select>
+             
+             {viewMode === 'heatmap' && (
+               <React.Fragment>
+                 <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500', marginLeft: '16px' }}>Min Win Rate:</label>
+                 <select 
+                   value={minWinRate} 
+                   onChange={(e) => setMinWinRate(Number(e.target.value))}
+                   style={{ 
+                     backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+                     color: '#e5e7eb', 
+                     border: '1px solid rgba(148, 163, 184, 0.3)', 
+                     borderRadius: '6px', 
+                     padding: '4px 8px', 
+                     fontSize: '12px',
+                     outline: 'none',
+                     cursor: 'pointer'
+                   }}
+                 >
+                   <option value={0}>Any</option>
+                   <option value={10}>&ge; 10%</option>
+                   <option value={20}>&ge; 20%</option>
+                   <option value={30}>&ge; 30%</option>
+                   <option value={40}>&ge; 40%</option>
+                   <option value={50}>&ge; 50%</option>
+                   <option value={60}>&ge; 60%</option>
+                   <option value={70}>&ge; 70%</option>
+                   <option value={80}>&ge; 80%</option>
+                   <option value={90}>&ge; 90%</option>
+                 </select>
+               </React.Fragment>
+             )}
            </div>
         </div>
         
@@ -893,6 +940,9 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
               </div>
               <div style={{ fontSize: '12px', color: '#e5e7eb', fontWeight: '500' }}>
                 Samples Analyzed
+              </div>
+              <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '6px' }}>
+                {kpis.validSamples?.toLocaleString() || 0} matching filters
               </div>
             </div>
 
