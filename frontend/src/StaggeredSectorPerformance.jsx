@@ -23,8 +23,9 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('average'); // 'average', 'sector'
-  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'mcap_graph', 'trust_score'
+  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'nrb_heatmap', 'mcap_graph', 'trust_score'
   const [heatmapData, setHeatmapData] = useState([]);
+  const [nrbHeatmapData, setNrbHeatmapData] = useState([]);
   const [successThreshold, setSuccessThreshold] = useState(20);
   const [minWinRate, setMinWinRate] = useState(0);
   const [kpis, setKpis] = useState({
@@ -54,6 +55,18 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     setSelectedCell({ sector, duration, rate, count });
     setLoadingTrades(true);
     axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-trades/?sector=${encodeURIComponent(sector)}&duration=${duration}&success_threshold=${successThreshold}`)
+      .then(res => {
+        setCellTrades(res.data || []);
+      })
+      .catch(err => console.error("Error fetching trades:", err))
+      .finally(() => setLoadingTrades(false));
+  };
+
+  const handleNrbCellClick = (sector, duration, rate, count) => {
+    if (count === 0 || rate === null) return;
+    setSelectedCell({ sector, duration: `${duration} Days`, rate, count });
+    setLoadingTrades(true);
+    axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-nrb-trades/?sector=${encodeURIComponent(sector)}&duration=${duration}&success_threshold=${successThreshold}`)
       .then(res => {
         setCellTrades(res.data || []);
       })
@@ -155,6 +168,13 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
         setHeatmapData(response.data || []);
       })
       .catch(err => console.error("Error fetching heatmap data:", err));
+
+    // Fetch NRB Heatmap Data
+    axios.get(`http://127.0.0.1:8000/api/sector-nrb-duration/?success_threshold=${successThreshold}`)
+      .then(response => {
+        setNrbHeatmapData(response.data || []);
+      })
+      .catch(err => console.error("Error fetching nrb heatmap data:", err));
 
   }, [successThreshold]);
 
@@ -529,6 +549,108 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     );
   };
 
+  const renderNRBHeatmap = () => {
+    if (nrbHeatmapData.length === 0) return <div style={{ color: '#9ca3af', padding: '24px' }}>No NRB data available to calculate heatmap.</div>;
+
+    const nrbDurations = ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100", "100-150", "150-200", "200-300", "300-500", ">500"];
+    const sectors = [...new Set(nrbHeatmapData.map(d => d.sector))].sort();
+
+    // Create lookup map
+    const lookup = {};
+    nrbHeatmapData.forEach(d => {
+      lookup[`${d.sector}-${d.duration}`] = d;
+    });
+
+    const getCellColor = (rate) => {
+      if (!rate && rate !== 0) return 'rgba(30, 41, 59, 0.5)'; // Empty
+      
+      if (rate >= 90) return 'rgba(21, 128, 61, 0.9)';   // Deep Green
+      if (rate >= 75) return 'rgba(22, 163, 74, 0.85)';  // Green
+      if (rate >= 60) return 'rgba(101, 163, 13, 0.8)';  // Lime/Yellow-Green
+      
+      if (rate >= 45) return 'rgba(202, 138, 4, 0.8)';   // Dark Yellow/Amber
+      
+      if (rate >= 30) return 'rgba(234, 88, 12, 0.8)';   // Orange-Red
+      if (rate >= 15) return 'rgba(220, 38, 38, 0.85)';  // Red
+      return 'rgba(153, 27, 27, 0.9)';                   // Deep Red (Lowest)
+    };
+
+    return (
+      <div style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.3)', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '16px' }}>Sector Performance vs NRB Duration Heatmap</h3>
+          <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>
+            Scale: Deep Red (0%) &rarr; Red &rarr; Amber &rarr; Lime &rarr; Deep Green (100%).
+          </p>
+        </div>
+        
+        <div style={{ overflow: 'auto', flex: 1 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `150px repeat(${nrbDurations.length}, 1fr)`, gap: '8px' }}>
+             {/* Header Row */}
+             <div style={{ padding: '12px', color: '#9ca3af', fontWeight: 'bold', fontSize: '12px' }}>Sector / NRB Duration</div>
+             {nrbDurations.map(d => (
+               <div key={d} style={{ padding: '12px', textAlign: 'center', color: '#c4b5fd', fontWeight: 'bold', fontSize: '12px', backgroundColor: 'rgba(15, 23, 42, 0.5)', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                 {d} Days
+               </div>
+             ))}
+
+             {/* Data Rows */}
+             {sectors.map(sector => (
+               <React.Fragment key={sector}>
+                 <div style={{ padding: '12px', color: '#e5e7eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center' }}>
+                   {sector}
+                 </div>
+                 {nrbDurations.map(duration => {
+                   const dataPoint = lookup[`${sector}-${duration}`];
+                   const rawRate = dataPoint ? dataPoint.success_rate : null;
+                   
+                   const meetsThreshold = rawRate !== null && rawRate >= minWinRate;
+                   const rate = meetsThreshold ? rawRate : null;
+                   
+                   return (
+                     <div 
+                       key={`${sector}-${duration}`}
+                       title={meetsThreshold ? `Success: ${rate}%\nSamples: ${dataPoint.sample_size}` : 'No Data or Below Min Win Rate'}
+                       style={{ 
+                         backgroundColor: getCellColor(rate),
+                         borderRadius: '6px',
+                         padding: '12px',
+                         display: 'flex',
+                         flexDirection: 'column',
+                         justifyContent: 'center',
+                         alignItems: 'center',
+                         minHeight: '60px',
+                         cursor: (meetsThreshold && dataPoint) ? 'pointer' : 'default',
+                         transition: 'transform 0.2s',
+                         border: '1px solid rgba(255,255,255,0.05)'
+                       }}
+                       onClick={() => handleNrbCellClick(sector, duration, rate, (meetsThreshold && dataPoint) ? dataPoint.sample_size : 0)}
+                       onMouseEnter={(e) => { if (meetsThreshold) e.currentTarget.style.transform = 'scale(1.05)' }}
+                       onMouseLeave={(e) => { if (meetsThreshold) e.currentTarget.style.transform = 'scale(1)' }}
+                     >
+                       {meetsThreshold ? (
+                         <>
+                           <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '14px', textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
+                             {rate.toFixed(0)}%
+                           </span>
+                           <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', marginTop: '4px' }}>
+                             {dataPoint.sample_size} trades
+                           </span>
+                         </>
+                       ) : (
+                         <span style={{ color: 'rgba(255,255,255,0.1)', fontSize: '12px' }}>-</span>
+                       )}
+                     </div>
+                   );
+                 })}
+               </React.Fragment>
+             ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderMcapGraph = () => {
     const scatterData = [];
     const mcaps = ['Mega', 'Large', 'Mid', 'Small'];
@@ -703,38 +825,42 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                <option value={100}>&gt;= 100%</option>
              </select>
              
-             {viewMode === 'heatmap' && (
-               <React.Fragment>
-                 <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500', marginLeft: '16px' }}>Min Win Rate:</label>
-                 <select 
-                   value={minWinRate} 
-                   onChange={(e) => setMinWinRate(Number(e.target.value))}
-                   style={{ 
-                     backgroundColor: 'rgba(15, 23, 42, 0.6)', 
-                     color: '#e5e7eb', 
-                     border: '1px solid rgba(148, 163, 184, 0.3)', 
-                     borderRadius: '6px', 
-                     padding: '4px 8px', 
-                     fontSize: '12px',
-                     outline: 'none',
-                     cursor: 'pointer'
-                   }}
-                 >
-                   <option value={0}>Any</option>
-                   <option value={10}>&ge; 10%</option>
-                   <option value={20}>&ge; 20%</option>
-                   <option value={30}>&ge; 30%</option>
-                   <option value={40}>&ge; 40%</option>
-                   <option value={50}>&ge; 50%</option>
-                   <option value={60}>&ge; 60%</option>
-                   <option value={70}>&ge; 70%</option>
-                   <option value={80}>&ge; 80%</option>
-                   <option value={90}>&ge; 90%</option>
-                 </select>
-               </React.Fragment>
-             )}
-           </div>
-        </div>
+            </div>
+            
+            {/* View Mode Filters */}
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {(viewMode === 'heatmap' || viewMode === 'nrb_heatmap') && (
+                <React.Fragment>
+                  <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500' }}>Min Win Rate:</label>
+                  <select 
+                    value={minWinRate} 
+                    onChange={(e) => setMinWinRate(Number(e.target.value))}
+                    style={{ 
+                      backgroundColor: 'rgba(15, 23, 42, 0.6)', 
+                      color: '#e5e7eb', 
+                      border: '1px solid rgba(148, 163, 184, 0.3)', 
+                      borderRadius: '6px', 
+                      padding: '4px 8px', 
+                      fontSize: '12px',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value={0}>Any</option>
+                    <option value={10}>&ge; 10%</option>
+                    <option value={20}>&ge; 20%</option>
+                    <option value={30}>&ge; 30%</option>
+                    <option value={40}>&ge; 40%</option>
+                    <option value={50}>&ge; 50%</option>
+                    <option value={60}>&ge; 60%</option>
+                    <option value={70}>&ge; 70%</option>
+                    <option value={80}>&ge; 80%</option>
+                    <option value={90}>&ge; 90%</option>
+                  </select>
+                </React.Fragment>
+              )}
+            </div>
+         </div>
         
         {/* View Selection & Sort Controls */}
         <div style={{ display: 'flex', gap: '8px', marginRight: '16px', alignItems: 'center' }}>
@@ -810,10 +936,27 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                 color: viewMode === 'heatmap' ? '#c4b5fd' : '#6b7280', 
                 fontSize: '11px', 
                 fontWeight: '600', 
-                cursor: 'pointer' 
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
               }}
             >
-              DUR HEATMAP
+              HLD HEATMAP
+            </button>
+            <button 
+              onClick={() => setViewMode('nrb_heatmap')}
+              style={{ 
+                padding: '6px 12px', 
+                borderRadius: '6px', 
+                border: 'none',
+                backgroundColor: viewMode === 'nrb_heatmap' ? 'rgba(139, 92, 246, 0.2)' : 'transparent', 
+                color: viewMode === 'nrb_heatmap' ? '#c4b5fd' : '#6b7280', 
+                fontSize: '11px', 
+                fontWeight: '600', 
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              NRB HEATMAP
             </button>
             <button 
               onClick={() => setViewMode('trust_score')}
@@ -1068,6 +1211,8 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
           renderHeatmap()
         ) : viewMode === 'mcap_graph' ? (
           renderMcapGraph()
+        ) : viewMode === 'nrb_heatmap' ? (
+          renderNRBHeatmap()
         ) : viewMode === 'trust_score' ? (
           renderTrustChart()
         ) : viewMode === 'table' ? (

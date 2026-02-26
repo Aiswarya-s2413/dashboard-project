@@ -528,3 +528,109 @@ class SectorTradesView(APIView):
         except Exception as e:
             print(f"Error in SectorTradesView: {str(e)}")
             return Response({"error": str(e)}, status=500)
+
+class SectorNRBDurationView(APIView):
+    """Returns sector performance broken down by NRB duration bins for the heatmap"""
+    def get(self, request):
+        try:
+            holding_weeks = 52  # Fixed default
+            cooldown = 52  # Fixed default
+            success_threshold = float(request.query_params.get("success_threshold", 20))
+            
+            # Cache check
+            cache_key = f"sector_nrb_duration_bubbles_{cooldown}_{success_threshold}"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data)
+            
+            # Fetch all relevant data at once to minimize queries
+            from datetime import date
+            
+            queryset = TradingData.objects.filter(
+                holding_weeks=holding_weeks,
+                cooldown_setting=cooldown,
+                breakout_date__lt=date(2025, 1, 1)
+            ).exclude(mcap_category='Micro')
+            
+            data_list = list(queryset.values('sector', 'duration', 'return_percentage'))
+            
+            if not data_list:
+                return Response([])
+                
+            df = pd.DataFrame(data_list)
+            
+            # Categorize duration
+            df['duration'] = pd.to_numeric(df['duration'], errors='coerce')
+            bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 300, 500, float("inf")]
+            labels = ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100", "100-150", "150-200", "200-300", "300-500", ">500"]
+            df['duration_bin'] = pd.cut(df['duration'], bins=bins, labels=labels, right=True)
+            
+            # Group by Sector and Duration Bin
+            grouped = df.groupby(['sector', 'duration_bin'])
+            
+            bubble_data = []
+            
+            for (sector, duration_bin), group in grouped:
+                if len(group) == 0:
+                    continue
+                success_rate = (group['return_percentage'] >= success_threshold).mean() * 100
+                sample_size = len(group)
+                
+                bubble_data.append({
+                    "sector": sector,
+                    "duration": duration_bin,
+                    "success_rate": round(success_rate, 1),
+                    "sample_size": sample_size
+                })
+            
+            # Cache for 10 minutes
+            cache.set(cache_key, bubble_data, 600)
+            return Response(bubble_data)
+            
+        except Exception as e:
+            print(f"Error in SectorNRBDurationView: {str(e)}")
+            return Response({"error": str(e)}, status=500)
+
+class SectorNRBTradesView(APIView):
+    """Returns the list of trades for a specific sector and NRB duration bin"""
+    def get(self, request):
+        try:
+            sector = request.query_params.get("sector")
+            duration_bin = request.query_params.get("duration") # e.g. "10-20"
+            cooldown = 52 # Fixed default
+            success_threshold = float(request.query_params.get("success_threshold", 20))
+            
+            if not sector or not duration_bin:
+                return Response({'error': 'Sector and duration are required'}, status=400)
+                
+            # Parse duration bounds
+            if duration_bin == ">500":
+                min_dur = 500
+                max_dur = float("inf")
+            else:
+                parts = duration_bin.split('-')
+                min_dur = int(parts[0])
+                max_dur = int(parts[1])
+            
+            # Fetch relevant basic info directly
+            queryset = TradingData.objects.filter(
+                sector=sector,
+                holding_weeks=52,
+                cooldown_setting=cooldown,
+                duration__gt=min_dur,
+                duration__lte=max_dur
+            ).exclude(mcap_category='Micro')
+            
+            # Fetch specific trades data to display
+            data_list = list(queryset.values('symbol', 'company', 'breakout_date', 'return_percentage', 'duration', 'mcap_category').order_by('-return_percentage'))
+            
+            # Label whether they met the success criteria or not based on threshold and enrich
+            for item in data_list:
+                item['successful'] = item['return_percentage'] >= success_threshold
+                if math.isnan(item['return_percentage']):
+                    item['return_percentage'] = 0.0
+
+            return Response(data_list)
+        except Exception as e:
+            print(f"Error in SectorNRBTradesView: {str(e)}")
+            return Response({"error": str(e)}, status=500)

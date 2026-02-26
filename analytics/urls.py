@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import DashboardDataView, SectorListView, KPIDataView, DateRangeView, SectorPerformanceView, ConfidenceTrendView, SectorDurationView, SectorTradesView
+from .views import DashboardDataView, SectorListView, KPIDataView, DateRangeView, SectorPerformanceView, ConfidenceTrendView, SectorDurationView, SectorTradesView, SectorNRBDurationView, SectorNRBTradesView
 
 urlpatterns = [
     path('chart-data/', DashboardDataView.as_view(), name='chart-data'),
@@ -9,5 +9,7 @@ urlpatterns = [
     path('sector-performance/', SectorPerformanceView.as_view(), name='sector-performance'),
     path('confidence-trend/', ConfidenceTrendView.as_view(), name='confidence-trend'),
     path('sector-duration/', SectorDurationView.as_view(), name='sector-duration'),
+    path('sector-nrb-duration/', SectorNRBDurationView.as_view(), name='sector-nrb-duration'),
     path('sector-trades/', SectorTradesView.as_view(), name='sector-trades'),
+    path('sector-nrb-trades/', SectorNRBTradesView.as_view(), name='sector-nrb-trades'),
 ]
