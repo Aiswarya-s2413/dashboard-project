@@ -170,7 +170,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
       .catch(err => console.error("Error fetching heatmap data:", err));
 
     // Fetch NRB Heatmap Data
-    axios.get(`http://127.0.0.1:8000/api/sector-nrb-duration/?success_threshold=${successThreshold}`)
+    axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-nrb-duration/?success_threshold=${successThreshold}`)
       .then(response => {
         setNrbHeatmapData(response.data || []);
       })
