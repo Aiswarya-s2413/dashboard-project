@@ -23,11 +23,13 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('average'); // 'average', 'sector'
-  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'nrb_heatmap', 'mcap_graph', 'trust_score'
+  const [viewMode, setViewMode] = useState('mcap_graph'); // 'chart', 'table', 'sector_bubble', 'heatmap', 'nrb_heatmap', 'mcap_graph', 'trust_score'
   const [heatmapData, setHeatmapData] = useState([]);
   const [nrbHeatmapData, setNrbHeatmapData] = useState([]);
   const [successThreshold, setSuccessThreshold] = useState(20);
   const [minWinRate, setMinWinRate] = useState(0);
+  const [showSuccessDef, setShowSuccessDef] = useState(false);
+  const [showWinRateDef, setShowWinRateDef] = useState(false);
   const [kpis, setKpis] = useState({
 
     bestSector: { name: '-', rate: 0 },
@@ -42,6 +44,23 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
   const [loadingTrades, setLoadingTrades] = useState(false);
 
   const chartContainerRef = useRef(null);
+  const successDefRef = useRef(null);
+  const winRateDefRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (successDefRef.current && !successDefRef.current.contains(event.target)) {
+        setShowSuccessDef(false);
+      }
+      if (winRateDefRef.current && !winRateDefRef.current.contains(event.target)) {
+        setShowWinRateDef(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const mcapColors = {
     'Mega': '#8b5cf6',  // Purple
@@ -476,7 +495,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     return (
       <div style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.3)', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)', padding: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ marginBottom: '20px' }}>
-          <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '16px' }}>Sector Performance vs Duration Heatmap</h3>
+          <h3 style={{ margin: 0, color: '#e5e7eb', fontSize: '16px' }}>Sector Performance vs Holding Duration Heatmap</h3>
           <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>
             Scale: Deep Red (0%) &rarr; Red &rarr; Amber &rarr; Lime &rarr; Deep Green (100%).
           </p>
@@ -485,7 +504,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
         <div style={{ overflow: 'auto', flex: 1 }}>
           <div style={{ display: 'grid', gridTemplateColumns: `150px repeat(${durations.length}, 1fr)`, gap: '8px' }}>
              {/* Header Row */}
-             <div style={{ padding: '12px', color: '#9ca3af', fontWeight: 'bold', fontSize: '12px' }}>Sector / Duration</div>
+             <div style={{ padding: '12px', color: '#9ca3af', fontWeight: 'bold', fontSize: '12px' }}>Sector / Holding Duration</div>
              {durations.map(d => (
                <div key={d} style={{ padding: '12px', textAlign: 'center', color: '#c4b5fd', fontWeight: 'bold', fontSize: '12px', backgroundColor: 'rgba(15, 23, 42, 0.5)', borderRadius: '6px' }}>
                  {d} Weeks
@@ -793,9 +812,23 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
              Fixed Parameters: 52 Weeks holding, 52 Weeks cooldown (Excluding Micro Cap)
            </div>
-           
            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-             <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500' }}>Success Rate Threshold:</label>
+             <div ref={successDefRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+               <label style={{ fontSize: '14px', color: '#9ca3af', fontWeight: '500', marginRight: '6px' }}>Success Rate Threshold:</label>
+               <button 
+                 onClick={() => setShowSuccessDef(!showSuccessDef)}
+                 title="What is Success Rate?"
+                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginRight: '6px' }}
+               >
+                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+               </button>
+               {showSuccessDef && (
+                 <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '8px', backgroundColor: '#1e293b', border: '1px solid #334155', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#e2e8f0', width: '300px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', zIndex: 100 }}>
+                    <div style={{ fontWeight: '700', marginBottom: '4px', color: '#f8fafc' }}>Success Rate</div>
+                    The percentage of total generated predictions that successfully reached the selected target (WIN). Setting this higher filters out sectors with too many failures.
+                 </div>
+               )}
+             </div>
              <select 
                value={successThreshold} 
                onChange={(e) => setSuccessThreshold(Number(e.target.value))}
@@ -804,8 +837,8 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                  color: '#e5e7eb', 
                  border: '1px solid rgba(148, 163, 184, 0.3)', 
                  borderRadius: '6px', 
-                 padding: '4px 8px', 
-                 fontSize: '12px',
+                 padding: '8px 12px', 
+                 fontSize: '14px',
                  outline: 'none',
                  cursor: 'pointer'
                }}
@@ -831,7 +864,22 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
             <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {(viewMode === 'heatmap' || viewMode === 'nrb_heatmap') && (
                 <React.Fragment>
-                  <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '500' }}>Min Win Rate:</label>
+                  <div ref={winRateDefRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <label style={{ fontSize: '14px', color: '#9ca3af', fontWeight: '500', marginRight: '6px' }}>Min Win Rate:</label>
+                    <button 
+                      onClick={() => setShowWinRateDef(!showWinRateDef)}
+                      title="What is Win Rate?"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginRight: '6px' }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    {showWinRateDef && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '8px', backgroundColor: '#1e293b', border: '1px solid #334155', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#e2e8f0', width: '300px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', zIndex: 100 }}>
+                        <div style={{ fontWeight: '700', marginBottom: '4px', color: '#f8fafc' }}>Win Rate</div>
+                        The ratio of profitable trades over the total number of trades taken. A high win rate indicates fewer false breakouts and highly reliable performance.
+                      </div>
+                    )}
+                  </div>
                   <select 
                     value={minWinRate} 
                     onChange={(e) => setMinWinRate(Number(e.target.value))}
@@ -840,8 +888,8 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                       color: '#e5e7eb', 
                       border: '1px solid rgba(148, 163, 184, 0.3)', 
                       borderRadius: '6px', 
-                      padding: '4px 8px', 
-                      fontSize: '12px',
+                      padding: '8px 12px', 
+                      fontSize: '14px',
                       outline: 'none',
                       cursor: 'pointer'
                     }}
@@ -866,6 +914,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
         <div style={{ display: 'flex', gap: '8px', marginRight: '16px', alignItems: 'center' }}>
           
           <div style={{ display: 'flex', backgroundColor: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(148, 163, 184, 0.2)', marginRight: '12px' }}>
+            {/*
             <button 
               onClick={() => setViewMode('chart')}
               style={{ 
@@ -911,6 +960,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
             >
               SECTOR BUBBLE
             </button>
+            */}
             <button 
               onClick={() => setViewMode('mcap_graph')}
               style={{ 
