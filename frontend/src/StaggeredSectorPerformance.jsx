@@ -1442,7 +1442,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {cellTrades.map((trade, idx) => (
+                    {cellTrades.filter(trade => trade.return_percentage !== 0).map((trade, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)', color: '#e5e7eb' }}>
                         <td style={{ padding: '12px 8px' }}>
                           <span style={{ fontWeight: '600' }}>{trade.symbol}</span>
