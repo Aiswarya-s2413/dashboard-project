@@ -399,7 +399,13 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
     }));
 
     return (
-      <div ref={chartContainerRef} style={{ width: '100%', minHeight: chartHeight }}>
+      <div ref={chartContainerRef} style={{ width: '100%', minHeight: chartHeight + 100 }}>
+        <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: 'rgba(15, 23, 42, 0.5)', borderRadius: '8px', border: '1px outset rgba(148, 163, 184, 0.2)'}}>
+          <h4 style={{ margin: '0 0 8px 0', color: '#e5e7eb', fontSize: '15px', fontWeight: 'bold' }}>What is Trust Score?</h4>
+          <p style={{ margin: 0, color: '#9ca3af', fontSize: '13px', lineHeight: '1.6' }}>
+            The <b>Trust Score</b> measures the overall reliability of a sector across different market cap sizes (Mega, Large, Mid, Small). It evaluates historical performance consistency (Win Rate) specifically combined with data availability (Sample Size). A higher cumulative score (up to a maximum of 4.0) means the sector consistently and predictably performs well across all market sizes without relying on lucky, low-sample trades.
+          </p>
+        </div>
         <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart 
             data={trustData} 
