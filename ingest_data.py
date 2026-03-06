@@ -1,4 +1,5 @@
 import os
+import glob
 import pandas as pd
 import django
 from django.conf import settings
@@ -11,7 +12,14 @@ from analytics.models import TradingData
 
 def get_mcap_map():
     print("📋 Loading MCAP categories...")
-    mcap_file = os.path.join(settings.BASE_DIR, "data", "MCAP-NSE-0711.csv")
+    # Auto-pick the most recently created MCAP-NSE-*.csv in data/
+    data_dir   = os.path.join(settings.BASE_DIR, "data")
+    mcap_files = glob.glob(os.path.join(data_dir, "MCAP-NSE-*.csv"))
+    if not mcap_files:
+        raise FileNotFoundError("No MCAP-NSE-*.csv file found in data/")
+    mcap_files.sort(key=os.path.getmtime)
+    mcap_file = mcap_files[-1]  # get newest file
+    print(f"    Using MCAP file: {os.path.basename(mcap_file)}")
     mcap_df = pd.read_csv(mcap_file)
     mcap_df["Market Capitalisation"] = pd.to_numeric(
         mcap_df["Market Capitalisation"].astype(str).str.replace(",", "", regex=True), 
