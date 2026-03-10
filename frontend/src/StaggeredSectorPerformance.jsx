@@ -83,7 +83,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
 
   const handleNrbCellClick = (sector, duration, rate, count) => {
     if (count === 0 || rate === null) return;
-    setSelectedCell({ sector, duration: `${duration} Days`, rate, count });
+    setSelectedCell({ sector, duration: `${duration} Weeks`, rate, count });
     setLoadingTrades(true);
     axios.get(`https://dashboard.aiswaryasathyan.space/api/sector-nrb-trades/?sector=${encodeURIComponent(sector)}&duration=${duration}&success_threshold=${successThreshold}`)
       .then(res => {
@@ -615,7 +615,7 @@ const StaggeredSectorPerformance = ({ onNavigate }) => {
              <div style={{ padding: '12px', color: '#9ca3af', fontWeight: 'bold', fontSize: '12px' }}>Sector / NRB Duration</div>
              {nrbDurations.map(d => (
                <div key={d} style={{ padding: '12px', textAlign: 'center', color: '#c4b5fd', fontWeight: 'bold', fontSize: '12px', backgroundColor: 'rgba(15, 23, 42, 0.5)', borderRadius: '6px', whiteSpace: 'nowrap' }}>
-                 {d} Days
+                 {d} Weeks
                </div>
              ))}
 
